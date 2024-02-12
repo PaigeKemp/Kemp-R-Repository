@@ -1,6 +1,6 @@
 ---
 title: "7_MPT_Exp12"
-author: "Vanessa Loaiza"
+author: "Vanessa Loaiza & Paige Kemp"
 date: "`r Sys.Date()`"
 output: html_document
 ---
