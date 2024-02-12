@@ -1,0 +1,131 @@
+---
+title: "Exp2_Cleaning"
+author: "Paige Kemp"
+date: "17/08/2021"
+output: html_document
+---
+# Clear Environment and Load Packages
+```{r Clear Environment and Load Packages}
+# Clear environment
+rm(list = ls())
+
+# Load packages
+library(tidyverse)
+library(magrittr)
+```
+
+# Read Raw Data File
+```{r Read Raw Data File}
+Raw_Data <- read.csv('../Data/Exp2_Data(n=97).csv', encoding = "UTF-8")
+```
+
+```{r}
+# Exclude extra participant (# 197)
+Raw_Data <-  Raw_Data %<>% filter(Subject != 197)
+```
+
+#Create Data Frame
+```{r Create Data Frame}
+# Select only the relevant variables of interest
+Demo_df <- Raw_Data %>%  
+  filter(Phase.Trial. == "Demographics") %>%
+  select(Subject, Age.RESP, EduAttain.Choice1.ValueLabel, EduYears.Choice1.ValueLabel, Ethnicity.Choice1.ValueLabel, Gender.Choice1.ValueLabel)
+Demo_df
+
+Cog_ref_df <- Raw_Data %>%  
+  filter(Phase.Trial. == "CognitiveReflectTest") %>%
+  select(Subject, CogRefMaterials, CogTestAnswer, CogQuestion.RESP)
+Cog_ref_df
+
+Cog_ref_df_wide <- Cog_ref_df %>% 
+    pivot_wider(names_from = CogRefMaterials, values_from = CogTestAnswer:CogQuestion.RESP)
+
+Attention_Checks <- Raw_Data  %>% 
+  filter(Phase.Trial. %in% c("AttentionCheck1","AttentionCheck2","AttentionCheck3","AttentionCheck4","AttentionCheck5")) %>%
+  select(Subject, Attention1a.RESP, Attention2a.RESP, Attention2a.RESP, Attention2a.Choices1.Value, 
+         Attention3a.RESP, Attention3a.Choices1.Value, Attention4a.RESP, Attention5a.RESP, Attention5a.Choices1.Value) %>%
+  group_by(Subject) %>% 
+  summarise_all(funs(trimws(paste(., collapse = ''))))
+Attention_Checks
+```
+
+```{r Create Data Frame}
+# Change text to lowercase
+Cog_ref_df_wide <- Cog_ref_df_wide %>% mutate_if(is.character, str_to_lower)
+
+# Create binary accuracy score for each cognitive reflection test
+Cog_ref_df_wide$Cog1_ACC <- ifelse(Cog_ref_df_wide$CogTestAnswer_1 == Cog_ref_df_wide$CogQuestion.RESP_1, 1, 0)
+
+Cog_ref_df_wide$Cog2_ACC <- ifelse(Cog_ref_df_wide$CogTestAnswer_2 == Cog_ref_df_wide$CogQuestion.RESP_2, 1, 0)
+
+Cog_ref_df_wide$Cog3_ACC <- ifelse(Cog_ref_df_wide$CogTestAnswer_3 == Cog_ref_df_wide$CogQuestion.RESP_3, 1, 0)
+
+Cog_ref_df_wide$Cog4_ACC <- ifelse(Cog_ref_df_wide$CogQuestion.RESP_4 == "2nd" 
+                            | Cog_ref_df_wide$CogQuestion.RESP_4 == "second"
+                            | Cog_ref_df_wide$CogQuestion.RESP_4 == "secondplace", 1, 0)
+
+Cog_ref_df_wide$Cog5_ACC <- ifelse(Cog_ref_df_wide$CogTestAnswer_5 == Cog_ref_df_wide$CogQuestion.RESP_5, 1, 0)
+
+Cog_ref_df_wide$Cog6_ACC <- ifelse(Cog_ref_df_wide$CogTestAnswer_6 == Cog_ref_df_wide$CogQuestion.RESP_6, 1, 0)
+
+Cog_ref_df_wide$Cog7_ACC <- ifelse(Cog_ref_df_wide$CogTestAnswer_7 == Cog_ref_df_wide$CogQuestion.RESP_7, 1, 0)
+
+# Create overall accuracy Score for cognitive reflection test
+Cog_ref_df_wide$Cog_ref_Sum  <- rowSums(Cog_ref_df_wide[,16:22])
+
+# Create data frame showing cognitive reflection test scores
+Cog_ref_Score <- Cog_ref_df_wide %>% 
+  group_by(Subject) %>% 
+  select(Cog_ref_Sum) %>% 
+  ungroup()
+Cog_ref_Score
+```
+```{r}
+# Change text to lowercase
+Attention_Checks_df <- Attention_Checks %>% mutate_if(is.character, str_to_lower)
+
+# Create binary accuracy score for each attention checks
+Attention_Checks_df$Attention1.ACC <- ifelse(Attention_Checks_df$Attention1a.RESP == "i", 1, 0)
+Attention_Checks_df$Attention2.ACC <- ifelse(Attention_Checks_df$Attention2a.RESP == "{pizza}", 1,0)
+Attention_Checks_df$Attention3.ACC <- ifelse(grepl("read", Attention_Checks_df$Attention3a.RESP), 1, 0)
+Attention_Checks_df$Attention4.ACC <- ifelse(Attention_Checks_df$Attention4a.RESP == "d", 1,0)
+Attention_Checks_df$Attention5.ACC <- ifelse(grepl("attent", Attention_Checks_df$Attention5a.RESP), 1, 0)
+
+# Create overall accuracy Score for attention checks
+Attention_Checks_df$Attention_Sum  <- rowSums(Attention_Checks_df[,10:14])
+
+# Create data frame showing subject attention scores
+Attention_Score <- Attention_Checks_df %>% 
+  group_by(Subject) %>% 
+  select(Attention_Sum) %>% 
+  ungroup()
+Attention_Score
+```
+
+#Provide data summaries
+## Summarize age and gender 
+```{r}
+# Get values from Education Years variable
+
+Demo_df$EduYears.Choice1.ValueLabel <- extract_numeric(Demo_df$EduYears.Choice1.ValueLabel)
+
+Age_Gender_df <- Demo_df %>%
+  dplyr::summarize(Subject_n = n(),
+            Females = sum(Gender.Choice1.ValueLabel == "Female"),
+            Male = sum(Gender.Choice1.ValueLabel == "Male"),
+            GD = sum(Gender.Choice1.ValueLabel == "Gender Diverse"),
+            Mean_Age = mean(Age.RESP),
+            SD_Age = sd(Age.RESP),
+            Min_Age = min(Age.RESP),
+            Max_Age = max(Age.RESP)) %>% 
+  mutate_if(is.numeric, round, digits = 2) 
+Age_Gender_df
+
+Edu_df <- Demo_df %>% 
+  dplyr::summarize(Mean_Edu = mean(EduYears.Choice1.ValueLabel, na.rm = T),
+            SD_Edu = sd(EduYears.Choice1.ValueLabel, na.rm = T),
+            Min_Edu = min(EduYears.Choice1.ValueLabel, na.rm = T),
+            Max_Edu = max(EduYears.Choice1.ValueLabel, na.rm = T)) %>% 
+  mutate_if(is.numeric, round, digits = 2) 
+Edu_df
+```

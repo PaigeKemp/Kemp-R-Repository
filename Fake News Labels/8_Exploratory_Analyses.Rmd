@@ -1,0 +1,1130 @@
+---
+title: <font size = "5"> Exploratory Analyses (Not Included)
+author: "Paige Kemp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r Clear environment and set seed, echo = FALSE}
+# Clear environment
+rm(list = ls())
+
+# Set seed
+set.seed(100) 
+```
+
+<font size = "3.5"> Load packages
+```{r Load packages, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(magrittr)
+library(lme4)
+#library(afex)
+library(emmeans)
+library(car)
+library(patchwork)
+library(knitr)
+library(Hmisc)
+```
+
+<font size = "3.5"> Global optimizer variable
+```{r Global optimizer variable}
+moreControl <- glmerControl(optCtrl=list(maxfun=2e6), optimizer="bobyqa")
+```
+
+```{r Sample sizes, echo = FALSE, message = FALSE}
+Exp1_n <- Exp1_data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_n <- Exp2_data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+```
+
+```{r Set factors, echo = FALSE, message = FALSE}
+Exp1_data_df %<>% mutate_at(c("Subject", "Topic", "HeadlineType", "Correction_Class_2", "Correction_Class_3"), factor) # Experiment 1
+Exp2_data_df %<>% mutate_at(c("Subject", "Topic", "HeadlineType", "Correction_Class_2", "Correction_Class_3"), factor) # Experiment 2
+```
+
+<font size = "3.5"> Creating data frame for Correction headline types
+```{r Creating data frame for Correction headline types, echo = FALSE}
+Correction_Only_e1_df <- Exp1_data_df %>% filter(!HeadlineType == "Repeated") %>% droplevels
+Correction_Only_e2_df <- Exp2_data_df %>% filter(!HeadlineType == "Repeated") %>% droplevels
+```
+
+```{r Hypothesis E2: Belief accuracy as a function of high beliefs - Conditional Real News Recall}
+# Data frames with only real news recall
+Belief_High_Correction_Real_Recall_Only_e1_df <- Correction_Only_e1_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Belief.RESP %in% c("4", "5", "6"))
+  
+Belief_High_Correction_Real_Recall_Only_e2_df <- Correction_Only_e2_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Belief.RESP %in% c("4", "5", "6"))
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Correct_Belief_High_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_High_Correction_Real_Recall_Only_e1_df)
+
+# Wald's test
+Anova(Belief_Correct_Belief_High_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Correct_Belief_High_Cond_lmer_e1_emmeans <- emmeans(Belief_Correct_Belief_High_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Belief_High_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Correct_Belief_High_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Belief_High_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Correct_Belief_High_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_High_Correction_Real_Recall_Only_e2_df)
+
+# Wald's test
+Anova(Belief_Correct_Belief_High_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Correct_Belief_High_Cond_lmer_e2_emmeans <- emmeans(Belief_Correct_Belief_High_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Belief_High_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Correct_Belief_High_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Belief_High_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E2: Belief accuracy as a function of high beliefs - Conditional Fake News Intrusions}
+# Data frames with only fake news intrusions
+Belief_High_Correction_Intru_Only_e1_df <- 
+  Correction_Only_e1_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+Belief_High_Correction_Intru_Only_e2_df <- 
+  Correction_Only_e2_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Intru_Belief_High_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_High_Correction_Intru_Only_e1_df)
+# Wald's test
+Anova(Belief_Intru_Belief_High_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Intru_Belief_High_Cond_lmer_e1_emmeans <- emmeans(Belief_Intru_Belief_High_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Belief_High_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Intru_Belief_High_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Belief_High_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Intru_Belief_High_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_High_Correction_Intru_Only_e2_df)
+# Wald's test
+Anova(Belief_Intru_Belief_High_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Intru_Belief_High_Cond_lmer_e2_emmeans <- emmeans(Belief_Intru_Belief_High_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Belief_High_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Intru_Belief_High_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Belief_High_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+
+
+<font size = "3.5"> Hypothesis E2: Belief accuracy as a function of low beliefs
+```{r Hypothesis E2: Belief accuracy as a function of low beliefs}
+## Experiment 1 ##
+
+# Model specification
+Belief_Test_Belief_Low_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Belief_Low_Correction_Only_e1_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_Belief_Low_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Test_Belief_Low_lmer_e1_emmeans <- emmeans(Belief_Test_Belief_Low_lmer_e1, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_Belief_Low_lmer_e1_emmeans_df <- as_tibble(Belief_Test_Belief_Low_lmer_e1_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_Belief_Low_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Test_Belief_Low_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Belief_Low_Correction_Only_e2_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_Belief_Low_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Test_Belief_Low_lmer_e2_emmeans <- emmeans(Belief_Test_Belief_Low_lmer_e2, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_Belief_Low_lmer_e2_emmeans_df <- as_tibble(Belief_Test_Belief_Low_lmer_e2_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_Belief_Low_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E2: Belief accuracy as a function of low beliefs - Conditional Real News Recall}
+# Data frames with only real news recall
+Belief_Low_Correction_Real_Recall_Only_e1_df <- Correction_Only_e1_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Belief.RESP %in% c("1", "2", "3"))
+  
+Belief_Low_Correction_Real_Recall_Only_e2_df <- Correction_Only_e2_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Belief.RESP %in% c("1", "2", "3"))
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Correct_Belief_Low_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_Low_Correction_Real_Recall_Only_e1_df)
+
+# Wald's test
+Anova(Belief_Correct_Belief_Low_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Correct_Belief_Low_Cond_lmer_e1_emmeans <- emmeans(Belief_Correct_Belief_Low_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Belief_Low_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Correct_Belief_Low_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Belief_Low_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Correct_Belief_Low_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_Low_Correction_Real_Recall_Only_e2_df)
+
+# Wald's test
+Anova(Belief_Correct_Belief_Low_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Correct_Belief_Low_Cond_lmer_e2_emmeans <- emmeans(Belief_Correct_Belief_Low_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Belief_Low_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Correct_Belief_Low_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Belief_Low_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E2: Belief accuracy as a function of low beliefs - Conditional Fake News Intrusions}
+# Data frames with only fake news intrusions
+Belief_Low_Correction_Intru_Only_e1_df <- 
+  Correction_Only_e1_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+Belief_Low_Correction_Intru_Only_e2_df <- 
+  Correction_Only_e2_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Intru_Belief_Low_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_Low_Correction_Intru_Only_e1_df)
+# Wald's test
+Anova(Belief_Intru_Belief_Low_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Intru_Belief_Low_Cond_lmer_e1_emmeans <- emmeans(Belief_Intru_Belief_Low_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Belief_Low_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Intru_Belief_Low_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Belief_Low_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Intru_Belief_Low_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Belief_Low_Correction_Intru_Only_e2_df)
+# Wald's test
+Anova(Belief_Intru_Belief_Low_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Intru_Belief_Low_Cond_lmer_e2_emmeans <- emmeans(Belief_Intru_Belief_Low_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Belief_Low_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Intru_Belief_Low_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Belief_Low_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+<font size = "3.5"> Hypothesis E3: Memory accuracy as a function of high topic familiarity
+```{r Hypothesis E3: Memory accuracy as a function of high topic familiarity - Real News Recall}
+
+# Data frame for Experiment 1
+Fam_High_e1_df <- Exp1_data_df %>%
+  filter(Familiarity.RESP %in% c("4", "5", "6"))
+
+# Data frame for Experiment 2
+Fam_High_e2_df <- Exp2_data_df %>%
+  filter(Familiarity.RESP %in% c("4", "5", "6"))
+
+## Real News Recall ##
+
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_Fam_High_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_High_e1_df)
+
+# Wald's test
+Anova(Real_News_Recall_Fam_High_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_Fam_High_glmer_e1_emmeans <- emmeans(Real_News_Recall_Fam_High_glmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Fam_High_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_Fam_High_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_Fam_High_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_Fam_High_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_High_e2_df)
+
+# Wald's test
+Anova(Real_News_Recall_Fam_High_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_Fam_High_glmer_e2_emmeans <- emmeans(Real_News_Recall_Fam_High_glmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Fam_High_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_Fam_High_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_Fam_High_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of high topic familiarity - Fake News Intrusions}
+# Data frame for Experiment 1
+Fam_High_Correction_Only_e1_df <- Correction_Only_e1_df %>%
+  filter(!HeadlineType %in% c("Repeated")) %>% 
+  filter(Familiarity.RESP %in% c("4", "5", "6"))
+
+# Data frame for Experiment 2
+Fam_High_Correction_Only_e2_df <- Correction_Only_e2_df %>%
+  filter(!HeadlineType %in% c("Repeated")) %>% 
+  filter(Familiarity.RESP %in% c("4", "5", "6"))
+
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_Fam_High_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_High_Correction_Only_e1_df)
+
+# Wald's test
+Anova(Fake_News_Intru_Fam_High_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Fam_High_glmer_e1_emmeans <- emmeans(Fake_News_Intru_Fam_High_glmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Fam_High_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_Fam_High_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_Fam_High_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_Fam_High_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_High_Correction_Only_e2_df)
+
+# Wald's test
+Anova(Fake_News_Intru_Fam_High_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Fam_High_glmer_e2_emmeans <- emmeans(Fake_News_Intru_Fam_High_glmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Fam_High_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_Fam_High_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_Fam_High_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of high topic familiarity - Fake News Recall}
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Rec_Fam_High_glmer_e1 <- glmer(Cor_Class_FN_Recall ~ Attention_Sum + HeadlineType + 
+                             (1 | Subject) + (1 | Topic), 
+                           family = binomial, 
+                           control = moreControl,
+                           data = Fam_High_Correction_Only_e1_df)
+
+# Wald's test
+Anova(Fake_News_Rec_Fam_High_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Rec_Fam_High_glmer_e1_emmeans <- emmeans(Fake_News_Rec_Fam_High_glmer_e1, 
+                                     list(pairwise ~ HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Rec_Fam_High_glmer_e1_emmeans_df <- as_tibble(Fake_News_Rec_Fam_High_glmer_e1_emmeans$emmeans))
+
+# Add variable for experiment number
+Fake_News_Rec_Fam_High_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Rec_Fam_High_glmer_e2 <- glmer(Cor_Class_FN_Recall ~ Attention_Sum + HeadlineType + 
+                             (1 | Subject) + (1 | Topic), 
+                           family = binomial, 
+                           control = moreControl,
+                           data = Fam_High_Correction_Only_e2_df)
+
+# Wald's test
+Anova(Fake_News_Rec_Fam_High_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Rec_Fam_High_glmer_e2_emmeans <- emmeans(Fake_News_Rec_Fam_High_glmer_e2, 
+                                     list(pairwise ~ HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Rec_Fam_High_glmer_e2_emmeans_df <- as_tibble(Fake_News_Rec_Fam_High_glmer_e2_emmeans$emmeans))
+
+# Add variable for experiment number
+Fake_News_Rec_Fam_High_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of high topic familiarity - Conditional Real News Recall}
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_Cond_Fam_High_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = Fam_High_Correction_Only_e1_df)
+
+# Wald's test
+Anova(Real_News_Recall_Cond_Fam_High_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_Cond_Fam_High_glmer_e1_emmeans <- emmeans(Real_News_Recall_Cond_Fam_High_glmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Cond_Fam_High_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_Cond_Fam_High_glmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Real_News_Recall_Cond_Fam_High_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_Cond_Fam_High_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = Fam_High_Correction_Only_e2_df)
+
+# Wald's test
+Anova(Real_News_Recall_Cond_Fam_High_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_Cond_Fam_High_glmer_e2_emmeans <- emmeans(Real_News_Recall_Cond_Fam_High_glmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Cond_Fam_High_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_Cond_Fam_High_glmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Real_News_Recall_Cond_Fam_High_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of high topic familiarity - Conditional Fake News Intrusions}
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_Cond_Fam_High_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = subset(Fam_High_Correction_Only_e1_df, !Correction_Class_3 == "Fake News Recalled"))
+
+# Wald's test
+Anova(Fake_News_Intru_Cond_Fam_High_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Cond_Fam_High_glmer_e1_emmeans <- emmeans(Fake_News_Intru_Cond_Fam_High_glmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Cond_Fam_High_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_Cond_Fam_High_glmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Fake_News_Intru_Cond_Fam_High_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_Cond_Fam_High_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = subset(Fam_High_Correction_Only_e2_df, !Correction_Class_3 == "Fake News Recalled"))
+
+# Wald's test
+Anova(Fake_News_Intru_Cond_Fam_High_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Cond_Fam_High_glmer_e2_emmeans <- emmeans(Fake_News_Intru_Cond_Fam_High_glmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Cond_Fam_High_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_Cond_Fam_High_glmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Fake_News_Intru_Cond_Fam_High_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+<font size = "3.5"> Hypothesis E3: Belief accuracy as a function of high topic familiarity
+```{r Hypothesis E3: Belief accuracy as a function of high topic familiarity}
+## Experiment 1 ##
+
+# Model specification
+Belief_Test_Fam_High_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Fam_High_Correction_Only_e1_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_Fam_High_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Test_Fam_High_lmer_e1_emmeans <- emmeans(Belief_Test_Fam_High_lmer_e1, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_Fam_High_lmer_e1_emmeans_df <- as_tibble(Belief_Test_Fam_High_lmer_e1_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_Fam_High_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Test_Fam_High_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Fam_High_Correction_Only_e2_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_Fam_High_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Test_Fam_High_lmer_e2_emmeans <- emmeans(Belief_Test_Fam_High_lmer_e2, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_Fam_High_lmer_e2_emmeans_df <- as_tibble(Belief_Test_Fam_High_lmer_e2_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_Fam_High_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Belief accuracy as a function of high topic familiarity - Conditional Real News Recall}
+# Data frames with only real news recall
+Fam_High_Correction_Real_Recall_Only_e1_df <- Correction_Only_e1_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Familiarity.RESP %in% c("4", "5", "6"))
+  
+Fam_High_Correction_Real_Recall_Only_e2_df <- Correction_Only_e2_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Familiarity.RESP %in% c("4", "5", "6"))
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Correct_Fam_High_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_High_Correction_Real_Recall_Only_e1_df)
+
+# Wald's test
+Anova(Belief_Correct_Fam_High_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Correct_Fam_High_Cond_lmer_e1_emmeans <- emmeans(Belief_Correct_Fam_High_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Fam_High_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Correct_Fam_High_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Fam_High_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Correct_Fam_High_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_High_Correction_Real_Recall_Only_e2_df)
+
+# Wald's test
+Anova(Belief_Correct_Fam_High_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Correct_Fam_High_Cond_lmer_e2_emmeans <- emmeans(Belief_Correct_Fam_High_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Fam_High_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Correct_Fam_High_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Fam_High_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Belief accuracy as a function of high topic familiarity - Conditional Fake News Intrusions}
+# Data frames with only fake news intrusions
+Fam_High_Correction_Intru_Only_e1_df <- 
+  Correction_Only_e1_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+Fam_High_Correction_Intru_Only_e2_df <- 
+  Correction_Only_e2_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Intru_Fam_High_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_High_Correction_Intru_Only_e1_df)
+# Wald's test
+Anova(Belief_Intru_Fam_High_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Intru_Fam_High_Cond_lmer_e1_emmeans <- emmeans(Belief_Intru_Fam_High_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Fam_High_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Intru_Fam_High_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Fam_High_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Intru_Fam_High_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_High_Correction_Intru_Only_e2_df)
+# Wald's test
+Anova(Belief_Intru_Fam_High_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Intru_Fam_High_Cond_lmer_e2_emmeans <- emmeans(Belief_Intru_Fam_High_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Fam_High_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Intru_Fam_High_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Fam_High_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+<font size = "3.5"> Hypothesis E3: Memory accuracy as a function of low topic familiarity
+```{r Hypothesis E3: Memory accuracy as a function of low topic familiarity - Real News Recall}
+# Data frame for Experiment 1
+Fam_Low_e1_df <- Exp1_data_df %>% filter(Familiarity.RESP %in% c("1", "2", "3"))
+
+# Data frame for Experiment 2
+Fam_Low_e2_df <- Exp2_data_df %>% filter(Familiarity.RESP %in% c("1", "2", "3"))
+
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_Fam_Low_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_Low_e1_df)
+
+# Wald's test
+Anova(Real_News_Recall_Fam_Low_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_Fam_Low_glmer_e1_emmeans <- emmeans(Real_News_Recall_Fam_Low_glmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Fam_Low_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_Fam_Low_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_Fam_Low_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_Fam_Low_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_Low_e2_df)
+
+# Wald's test
+Anova(Real_News_Recall_Fam_Low_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_Fam_Low_glmer_e2_emmeans <- emmeans(Real_News_Recall_Fam_Low_glmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Fam_Low_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_Fam_Low_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_Fam_Low_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of low topic familiarity - Fake News Intrusions}
+# Data frame for Experiment 1
+Fam_Low_Correction_Only_e1_df <- Correction_Only_e1_df %>%
+  filter(!HeadlineType %in% c("Repeated")) %>% 
+  filter(Familiarity.RESP %in% c("1", "2", "3"))
+
+# Data frame for Experiment 2
+Fam_Low_Correction_Only_e2_df <- Correction_Only_e2_df %>%
+  filter(!HeadlineType %in% c("Repeated")) %>% 
+  filter(Familiarity.RESP %in% c("1", "2", "3"))
+
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_Fam_Low_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_Low_Correction_Only_e1_df)
+
+# Wald's test
+Anova(Fake_News_Intru_Fam_Low_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Fam_Low_glmer_e1_emmeans <- emmeans(Fake_News_Intru_Fam_Low_glmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Fam_Low_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_Fam_Low_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_Fam_Low_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_Fam_Low_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Fam_Low_Correction_Only_e2_df)
+
+# Wald's test
+Anova(Fake_News_Intru_Fam_Low_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Fam_Low_glmer_e2_emmeans <- emmeans(Fake_News_Intru_Fam_Low_glmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Fam_Low_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_Fam_Low_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_Fam_Low_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of low topic familiarity - Fake News Recall}
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Rec_Fam_Low_glmer_e1 <- glmer(Cor_Class_FN_Recall ~ Attention_Sum + HeadlineType + 
+                             (1 | Subject) + (1 | Topic), 
+                           family = binomial, 
+                           control = moreControl,
+                           data = Fam_Low_Correction_Only_e1_df)
+
+# Wald's test
+Anova(Fake_News_Rec_Fam_Low_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Rec_Fam_Low_glmer_e1_emmeans <- emmeans(Fake_News_Rec_Fam_Low_glmer_e1, 
+                                     list(pairwise ~ HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Rec_Fam_Low_glmer_e1_emmeans_df <- as_tibble(Fake_News_Rec_Fam_Low_glmer_e1_emmeans$emmeans))
+
+# Add variable for experiment number
+Fake_News_Rec_Fam_Low_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Rec_Fam_Low_glmer_e2 <- glmer(Cor_Class_FN_Recall ~ Attention_Sum + HeadlineType + 
+                             (1 | Subject) + (1 | Topic), 
+                           family = binomial, 
+                           control = moreControl,
+                           data = Fam_Low_Correction_Only_e2_df)
+
+# Wald's test
+Anova(Fake_News_Rec_Fam_Low_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Rec_Fam_Low_glmer_e2_emmeans <- emmeans(Fake_News_Rec_Fam_Low_glmer_e2, 
+                                     list(pairwise ~ HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Rec_Fam_Low_glmer_e2_emmeans_df <- as_tibble(Fake_News_Rec_Fam_Low_glmer_e2_emmeans$emmeans))
+
+# Add variable for experiment number
+Fake_News_Rec_Fam_Low_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of low topic familiarity - Conditional Real News Recall}
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_Cond_Fam_Low_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = Fam_Low_Correction_Only_e1_df)
+
+# Wald's test
+Anova(Real_News_Recall_Cond_Fam_Low_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_Cond_Fam_Low_glmer_e1_emmeans <- emmeans(Real_News_Recall_Cond_Fam_Low_glmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Cond_Fam_Low_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_Cond_Fam_Low_glmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Real_News_Recall_Cond_Fam_Low_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_Cond_Fam_Low_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = Fam_Low_Correction_Only_e2_df)
+
+# Wald's test
+Anova(Real_News_Recall_Cond_Fam_Low_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_Cond_Fam_Low_glmer_e2_emmeans <- emmeans(Real_News_Recall_Cond_Fam_Low_glmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Cond_Fam_Low_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_Cond_Fam_Low_glmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Real_News_Recall_Cond_Fam_Low_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Memory accuracy as a function of low topic familiarity - Conditional Fake News Intrusions}
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_Cond_Fam_Low_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = subset(Fam_Low_Correction_Only_e1_df, !Correction_Class_3 == "Fake News Recalled"))
+
+# Wald's test
+Anova(Fake_News_Intru_Cond_Fam_Low_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Cond_Fam_Low_glmer_e1_emmeans <- emmeans(Fake_News_Intru_Cond_Fam_Low_glmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Cond_Fam_Low_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_Cond_Fam_Low_glmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Fake_News_Intru_Cond_Fam_Low_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_Cond_Fam_Low_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = subset(Fam_Low_Correction_Only_e2_df, !Correction_Class_3 == "Fake News Recalled"))
+
+# Wald's test
+Anova(Fake_News_Intru_Cond_Fam_Low_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Cond_Fam_Low_glmer_e2_emmeans <- emmeans(Fake_News_Intru_Cond_Fam_Low_glmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Cond_Fam_Low_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_Cond_Fam_Low_glmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Fake_News_Intru_Cond_Fam_Low_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+<font size = "3.5"> Hypothesis E3: Belief accuracy as a function of low topic familiarity
+```{r Hypothesis E3: Belief accuracy as a function of low topic familiarity}
+## Experiment 1 ##
+
+# Model specification
+Belief_Test_Fam_Low_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Fam_Low_Correction_Only_e1_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_Fam_Low_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Test_Fam_Low_lmer_e1_emmeans <- emmeans(Belief_Test_Fam_Low_lmer_e1, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_Fam_Low_lmer_e1_emmeans_df <- as_tibble(Belief_Test_Fam_Low_lmer_e1_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_Fam_Low_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Test_Fam_Low_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Fam_Low_Correction_Only_e2_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_Fam_Low_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Test_Fam_Low_lmer_e2_emmeans <- emmeans(Belief_Test_Fam_Low_lmer_e2, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_Fam_Low_lmer_e2_emmeans_df <- as_tibble(Belief_Test_Fam_Low_lmer_e2_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_Fam_Low_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Belief accuracy as a function of low topic familiarity - Conditional Real News Recall}
+# Data frames with only real news recall
+Fam_Low_Correction_Real_Recall_Only_e1_df <- Correction_Only_e1_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Familiarity.RESP %in% c("1", "2", "3"))
+  
+Fam_Low_Correction_Real_Recall_Only_e2_df <- Correction_Only_e2_df %>% 
+  filter(Memory_Classification == "Real News Correct") %>%
+  filter(Familiarity.RESP %in% c("1", "2", "3"))
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Correct_Fam_Low_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_Low_Correction_Real_Recall_Only_e1_df)
+
+# Wald's test
+Anova(Belief_Correct_Fam_Low_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Correct_Fam_Low_Cond_lmer_e1_emmeans <- emmeans(Belief_Correct_Fam_Low_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Fam_Low_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Correct_Fam_Low_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Fam_Low_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Correct_Fam_Low_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_Low_Correction_Real_Recall_Only_e2_df)
+
+# Wald's test
+Anova(Belief_Correct_Fam_Low_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Correct_Fam_Low_Cond_lmer_e2_emmeans <- emmeans(Belief_Correct_Fam_Low_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Fam_Low_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Correct_Fam_Low_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Fam_Low_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Hypothesis E3: Belief accuracy as a function of low topic familiarity - Conditional Fake News Intrusions}
+# Data frames with only fake news intrusions
+Fam_Low_Correction_Intru_Only_e1_df <- 
+  Correction_Only_e1_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+Fam_Low_Correction_Intru_Only_e2_df <- 
+  Correction_Only_e2_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Intru_Fam_Low_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_Low_Correction_Intru_Only_e1_df)
+# Wald's test
+Anova(Belief_Intru_Fam_Low_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Intru_Fam_Low_Cond_lmer_e1_emmeans <- emmeans(Belief_Intru_Fam_Low_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Fam_Low_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Intru_Fam_Low_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Fam_Low_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Intru_Fam_Low_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Fam_Low_Correction_Intru_Only_e2_df)
+# Wald's test
+Anova(Belief_Intru_Fam_Low_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Intru_Fam_Low_Cond_lmer_e2_emmeans <- emmeans(Belief_Intru_Fam_Low_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Fam_Low_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Intru_Fam_Low_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Fam_Low_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```

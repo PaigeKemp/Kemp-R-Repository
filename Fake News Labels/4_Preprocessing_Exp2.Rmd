@@ -1,0 +1,153 @@
+---
+title: "Exp2_Cleaning"
+author: "Paige Kemp"
+date: "17/08/2021"
+output: html_document
+---
+# Clear Environment and Load Packages
+```{r Clear Environment and Load Packages}
+# Clear environment
+rm(list = ls())
+
+# Load packages
+library(tidyverse)
+library(magrittr)
+```
+
+# Read Raw Data File
+```{r Read Raw Data File}
+Raw_Data <- read.csv('../Data/Exp2_Data(n=97).csv', encoding = "UTF-8")
+Coded_Exp2_data_df <- read_csv('../Data/Exp2_Coded_Data.csv', show_col_types = FALSE)
+```
+
+# Create Data Frame  and Rename Variables
+```{r Create Data Frame  and Rename Variables}
+# Rename Variable
+Raw_Data <- Raw_Data %>% rename(Phase = Phase.Trial.)
+
+# Replace NAs with blanks for attention check responses
+Raw_Data$Attention1a.RESP %<>% replace(is.na(.), "")
+Raw_Data$Attention2a.RESP %<>% replace(is.na(.), "")
+Raw_Data$Attention3a.RESP %<>% replace(is.na(.), "")
+Raw_Data$Attention4a.RESP %<>% replace(is.na(.), "")
+Raw_Data$Attention5a.RESP %<>% replace(is.na(.), "")
+
+# Select only the relevant variables of interest
+Clean_df <- Raw_Data %>%  
+  select(CB, Trial, SubTrial, Subject, Phase, Procedure.Trial., MisinfoStatement, Statement, BeliefBase.RESP, Belief.RESP, Familiarity.RESP, TestItem.RESP, OtherAnswer.RESP, CR.RESP, Alternate, Target, Topic, StatementType)
+
+# Rename Variables
+Clean_df <- Clean_df %>%
+  rename(RN_Headline = Statement,
+         FN_Statement = MisinfoStatement,
+         HeadlineType = StatementType)
+```
+
+# Creating Data Frames For Each Phase
+```{r Creating Data Frames For Each Phase}
+# Filter for Beliefs Ratings at Baseline
+Belief_Base_df <-  Clean_df %>%
+  filter(Phase == "List1Belief") %>%
+  select(CB, Subject, Topic, HeadlineType, BeliefBase.RESP)
+
+# Filter for Familiarity Ratings
+Fam_df <-  Clean_df %>%
+  filter(Phase == "List1Fam") %>%
+  select(CB, Subject, Topic, HeadlineType, Familiarity.RESP)
+
+# Merge Phase 1 Data
+Phase1_df <- Belief_Base_df %>%
+  full_join(Fam_df, by = c("CB", "Subject","Topic", "HeadlineType")) 
+```
+
+# Create Data Frame for Attention Checks
+```{r Create Data Frame for Attention Checks}
+# Filter for Attention Check
+Attention_Checks <- Raw_Data  %>% 
+  filter(Phase %in% c("AttentionCheck1","AttentionCheck2","AttentionCheck3","AttentionCheck4","AttentionCheck5")) %>%
+  select(Subject, Attention1a.RESP, Attention2a.RESP, Attention2a.RESP, Attention2a.Choices1.Value, 
+         Attention3a.RESP, Attention3a.Choices1.Value, Attention4a.RESP, Attention5a.RESP, Attention5a.Choices1.Value) %>%
+  group_by(Subject) %>% 
+  summarise_all(funs(trimws(paste(., collapse = ''))))
+
+# Change text to lowercase
+Attention_Checks_df <- Attention_Checks %>% mutate_if(is.character, str_to_lower)
+
+# Create Binary Accuracy Score for each Attention Check
+Attention_Checks_df$Attention1.ACC <- ifelse(Attention_Checks_df$Attention1a.RESP == "i", 1, 0)
+Attention_Checks_df$Attention2.ACC <- ifelse(Attention_Checks_df$Attention2a.RESP == "{pizza}", 1,0)
+Attention_Checks_df$Attention3.ACC <- ifelse(grepl("read", Attention_Checks_df$Attention3a.RESP), 1, 0)
+Attention_Checks_df$Attention4.ACC <- ifelse(Attention_Checks_df$Attention4a.RESP == "d", 1,0)
+Attention_Checks_df$Attention5.ACC <- ifelse(grepl("attent", Attention_Checks_df$Attention5a.RESP), 1, 0)
+
+# Create Overall Accuracy Score for Attention Checks
+(Attention_Checks_df$Attention_Sum  <- rowSums(Attention_Checks_df[,10:14]))
+
+# Create Data Frame showing who failed
+Attention_Score <- Attention_Checks_df %>% 
+  group_by(Subject) %>% 
+  select(Attention_Sum) %>% 
+  ungroup()
+Attention_Score
+```
+
+# Merging Data Frames
+```{r Merging Data Frames}
+# Join Phase 1 and Test data
+Exp2_data_df <- Coded_Exp2_data_df %>% 
+  full_join(Phase1_df) %>%   
+  full_join(. , Attention_Score)
+Exp2_data_df
+```
+
+# Prepping Phase 3 Data
+```{r Prepping Phase 3 Data}
+## Creating binary variables
+# For each response type (RN correct, FN intrusion, Ambiguous, Error)
+Exp2_data_df$RN_Correct <- ifelse(Exp2_data_df$L2.Recall.Class == "2", 1, 0)
+Exp2_data_df$FN_Intrusion <- ifelse(Exp2_data_df$L2.Recall.Class == "1", 1, 0)
+Exp2_data_df$RN_Ambiguous <- if_else(Exp2_data_df$L2.Recall.Class == "A", 1, 0)
+Exp2_data_df$RN_Error <- if_else(Exp2_data_df$L2.Recall.Class == "E", 1, 0)
+Exp2_data_df$Check_1 <- rowSums(Exp2_data_df[,19:22])
+
+# For each response type (L1 correct, L2 intrusion, Ambiguous, Error)
+Exp2_data_df$FN_Correct <- ifelse(Exp2_data_df$L1.Recall.Class == "1", 1, 0)
+Exp2_data_df$RN_Intrusion <- ifelse(Exp2_data_df$L1.Recall.Class == "2", 1, 0)
+Exp2_data_df$FN_Ambiguous <- if_else(Exp2_data_df$L1.Recall.Class == "A", 1, 0)
+Exp2_data_df$FN_Error <- if_else(Exp2_data_df$L1.Recall.Class == "E", 1, 0)
+Exp2_data_df$Check_2 <- rowSums(Exp2_data_df[,24:27])
+
+# Change Class Binary
+Exp2_data_df$Correction_Class_2 <- ifelse(Exp2_data_df$CR.RESP == "1", "Corrected", "Not Corrected")
+
+## Labeling the classification types
+# Create variable including labels for each classification type
+Exp2_data_df$Correction_Class_3 <- 
+  ifelse(Exp2_data_df$CR.RESP == "1" & Exp2_data_df$FN_Correct == "1", "Fake News Recalled",
+  ifelse(Exp2_data_df$CR.RESP == "1" & Exp2_data_df$FN_Correct != "1", "Correction + Fake News Not Recalled",
+  ifelse(Exp2_data_df$CR.RESP == "0", "Not a Correction", "NA")))
+
+# Create binary variables for each classification type
+Exp2_data_df$Cor_Class_FN_Recall <- ifelse(Exp2_data_df$Correction_Class_3 == "Fake News Recalled", 1, 0)
+Exp2_data_df$Cor_Class_No_FN_Recall <- ifelse(Exp2_data_df$Correction_Class_3 == "Correction + Fake News Not Recalled", 1, 0)
+Exp2_data_df$No_Cor_Class <- ifelse(Exp2_data_df$Correction_Class_3 == "Not a Correction", 1, 0)
+
+# Create variable for memory response type for belief ratings
+Exp2_data_df$Memory_Classification <- 
+  ifelse(Exp2_data_df$RN_Correct == "1", "Real News Correct",
+  ifelse(Exp2_data_df$FN_Intrusion == "1", "Fake News Intrusion",
+  ifelse(Exp2_data_df$RN_Ambiguous == "1", "Other",
+  ifelse(Exp2_data_df$RN_Error == "1", "Other", "0"))))
+table(Exp2_data_df$Memory_Classification)
+
+# Exclude extra participant (# 197)
+Exp2_data_df %<>% filter(Subject != 197)
+```
+
+# Write Data frame
+```{r Write Data frame}
+write.csv(Exp2_data_df, '../Data/clean_df_e2.csv', row.names = FALSE)
+```
+
+
+

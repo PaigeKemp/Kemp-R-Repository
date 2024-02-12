@@ -1,0 +1,1805 @@
+---
+title: <font size = "5"> Conflict Saliency
+author: "Paige Kemp"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+   toc: true
+   toc_float: true
+  pdf_document: default
+---
+
+```{r Clear environment and set seed, echo = FALSE}
+# Clear environment
+rm(list = ls())
+
+# Set seed
+set.seed(100) 
+```
+
+<font size = "3.5"> Load packages
+```{r Load packages, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(magrittr)
+library(lme4)
+library(emmeans)
+library(car)
+library(patchwork)
+library(knitr)
+library(Hmisc)
+library(cowplot)
+```
+
+<font size = "3.5"> Global optimizer variable
+```{r Global optimizer variable}
+moreControl <- glmerControl(optCtrl=list(maxfun=2e6), optimizer="bobyqa")
+```
+
+```{r Global fill colors, echo = FALSE}
+att_check_0 <- "#FE5F55"
+att_check_1 <- "#FE5F55"
+att_check_2 <- "#FE5F55"
+att_check_3 <- "gray"
+att_check_4 <- "gray"
+att_check_5 <- "gray"
+repetition_color <- "#41a764"
+correction_color <- "#20a94d"
+correction_label_color <- "#378b71"
+misinformation_label_color <- "#378b71"
+correction_reminder_color <- "#17365e"
+FN_Recall_color <- "springgreen3"
+Cor_Class_color <- "blue"
+No_Cor_Class_color <- "red"
+RN_Correct <- "#B47846"
+FN_Intrusion <- "#4682B4" 
+```
+
+```{r Read data frames, message = FALSE}
+# Experiment data frames
+Exp1_data_df <- read_csv('../Data/clean_df_e1.csv')
+Exp2_data_df <- read_csv('../Data/clean_df_e2.csv')
+
+# Cognitive reflection task data frames
+Exp1_crt_df <- read_csv('../Data/crt_df_e1.csv') 
+Exp2_crt_df <- read_csv('../Data/crt_df_e2.csv')
+
+# Combine data frames
+Exp1_data_df %<>% left_join(Exp1_crt_df)
+Exp2_data_df %<>% left_join(Exp2_crt_df)
+```
+
+```{r Sample sizes, echo = FALSE, message = FALSE}
+Exp1_n <- Exp1_data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_n <- Exp2_data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+```
+
+```{r Set factors, echo = FALSE, message = FALSE}
+Exp1_data_df %<>% mutate_at(c("Subject", "Topic", "HeadlineType", "Correction_Class_2", "Correction_Class_3"), factor) # Experiment 1
+Exp2_data_df %<>% mutate_at(c("Subject", "Topic", "HeadlineType", "Correction_Class_2", "Correction_Class_3"), factor) # Experiment 2
+```
+
+```{r Counterbalancing checks}
+# Experiment 1
+e1_cb <- 
+  Exp1_data_df %>% 
+  group_by(CB) %>% 
+  summarise(n = n()/60)
+
+# Experiment 2
+e2_cb <- 
+  Exp2_data_df %>% 
+  group_by(CB) %>% 
+  summarise(n = n()/60)
+```
+
+```{r Attention score summary, echo = FALSE, message = FALSE}
+# Convert Attention Score variable to numeric
+Exp1_data_df$Attention_Sum <- as.numeric(Exp1_data_df$Attention_Sum)   
+Exp2_data_df$Attention_Sum <- as.numeric(Exp2_data_df$Attention_Sum)   
+
+# Convert Attention Score variable to Character
+Exp1_data_df$Attention_Char <- as.character(Exp1_data_df$Attention_Sum)   
+Exp2_data_df$Attention_Char <- as.character(Exp2_data_df$Attention_Sum)   
+
+# Counts for attention checks
+
+# Experiment 1
+
+Attn_summary_e1 <- 
+  Exp1_data_df %>%
+  group_by(Subject) %>% 
+  summarise(Attn_Correct = mean(Attention_Sum))
+  Attn_summary_e1$Attn_Correct <- ifelse(Attn_summary_e1$Attn_Correct < 3, "Failed", "Passed")
+
+Attn_summary_pass_e1 <- 
+  Attn_summary_e1 %>% 
+  group_by(Attn_Correct) %>% 
+    dplyr::summarize(Pass = sum(Attn_Correct == "Passed"),
+                     Failed = sum(Attn_Correct == "Failed"))
+
+# Experiment 2
+
+Attn_summary_e2 <- 
+  Exp2_data_df %>%
+  group_by(Subject) %>% 
+  summarise(Attn_Correct = mean(Attention_Sum))
+  Attn_summary_e2$Attn_Correct <- ifelse(Attn_summary_e2$Attn_Correct < 3, "Failed", "Passed")
+
+Attn_summary_pass_e2 <- 
+  Attn_summary_e2 %>% 
+  group_by(Attn_Correct) %>% 
+    dplyr::summarize(Pass = sum(Attn_Correct == "Passed"),
+                     Failed = sum(Attn_Correct == "Failed"))
+```
+
+<font size = "3.5"> Creating data frame for Correction headline types
+```{r Creating data frame for Correction headline types, echo = FALSE}
+Correction_Only_e1_df <- Exp1_data_df %>% filter(!HeadlineType == "Repeated") %>% droplevels
+Correction_Only_e2_df <- Exp2_data_df %>% filter(!HeadlineType == "Repeated") %>% droplevels
+```
+
+<font size = "3.5"> Model real news recall
+```{r Model real news recall}
+
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Exp1_data_df)
+
+# Wald's test
+Anova(Real_News_Recall_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_glmer_e1_emmeans <- emmeans(Real_News_Recall_glmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                         (1 | Subject) + (1 | Topic), 
+                         family = binomial,
+                         control = moreControl, 
+                         data = Exp2_data_df)
+
+# Wald's test
+Anova(Real_News_Recall_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_glmer_e2_emmeans <- emmeans(Real_News_Recall_glmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Combine correct real news recall data frames, echo = FALSE}
+Real_News_Recall_emmeans_all_df <- 
+    bind_rows(Real_News_Recall_glmer_e1_emmeans_df, Real_News_Recall_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything()) 
+
+# Re-order factor levels
+Real_News_Recall_emmeans_all_df$HeadlineType <- 
+  factor(Real_News_Recall_emmeans_all_df$HeadlineType, levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction", "Repeated"))
+```
+
+<font size = "3.5"> Model fake news intrusions
+```{r Model fake news intrusions}
+
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                         (1 | Subject) + (1 | Topic), 
+                         family = binomial,
+                         control = moreControl, 
+                         data = Correction_Only_e1_df)
+
+# Wald's test
+Anova(Fake_News_Intru_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_glmer_e1_emmeans <- emmeans(Fake_News_Intru_glmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                         (1 | Subject) + (1 | Topic), 
+                         family = binomial,
+                         control = moreControl, 
+                         data = Correction_Only_e2_df)
+
+# Wald's test
+Anova(Fake_News_Intru_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_glmer_e2_emmeans <- emmeans(Fake_News_Intru_glmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Combine correct fake news intrusion data frames, echo = FALSE}
+Fake_News_Intru_emmeans_all_df <- 
+    bind_rows(Fake_News_Intru_glmer_e1_emmeans_df, Fake_News_Intru_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything()) 
+
+# Re-order factor levels
+Fake_News_Intru_emmeans_all_df$HeadlineType <- 
+  factor(Fake_News_Intru_emmeans_all_df$HeadlineType, levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+```
+
+<font size = "3.5"> Model fake news recall
+```{r Model fake news recall}
+
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Rec_glmer_e1 <- glmer(Cor_Class_FN_Recall ~ Attention_Sum + HeadlineType + 
+                             (1 | Subject) + (1 | Topic), 
+                           family = binomial, 
+                           control = moreControl,
+                           data = Correction_Only_e1_df)
+
+# Wald's test
+Anova(Fake_News_Rec_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Rec_glmer_e1_emmeans <- emmeans(Fake_News_Rec_glmer_e1, 
+                                     list(pairwise ~ HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Rec_glmer_e1_emmeans_df <- as_tibble(Fake_News_Rec_glmer_e1_emmeans$emmeans))
+
+# Add variable for experiment number
+Fake_News_Rec_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Rec_glmer_e2 <- glmer(Cor_Class_FN_Recall ~ Attention_Sum + HeadlineType + 
+                             (1 | Subject) + (1 | Topic), 
+                           family = binomial, 
+                           control = moreControl,
+                           data = Correction_Only_e2_df)
+
+# Wald's test
+Anova(Fake_News_Rec_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Rec_glmer_e2_emmeans <- emmeans(Fake_News_Rec_glmer_e2, 
+                                     list(pairwise ~ HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Rec_glmer_e2_emmeans_df <- as_tibble(Fake_News_Rec_glmer_e2_emmeans$emmeans))
+
+# Add variable for experiment number
+Fake_News_Rec_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+```{r Combine fake news recall data frames, echo = FALSE}
+Fake_News_Rec_emmeans_all_df <- 
+    bind_rows(Fake_News_Rec_glmer_e1_emmeans_df, Fake_News_Rec_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything()) 
+
+# Re-order factor levels
+Fake_News_Rec_emmeans_all_df$HeadlineType <- 
+  factor(Fake_News_Rec_emmeans_all_df$HeadlineType, levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+```
+
+Data frame for combined Figure 2
+```{r Data frame for combined Figure 2}
+
+# Remove repeated headlines from real news recall df
+Real_News_Recall_emmeans_all_no_rep_df <- Real_News_Recall_emmeans_all_df %>% filter(HeadlineType != "Repeated")
+
+# Add response type variable
+Real_News_Recall_emmeans_all_no_rep_df$ResponseType <- "Real News Recall"
+Fake_News_Intru_emmeans_all_df$ResponseType <- "Intrusions of Fake News"
+Fake_News_Rec_emmeans_all_df$ResponseType <- "Fake News Recall"
+
+# Combine response type dfs
+Cued_Recall_df <- bind_rows(Real_News_Recall_emmeans_all_no_rep_df, Fake_News_Intru_emmeans_all_df, Fake_News_Rec_emmeans_all_df)
+
+# Create second HeadlineType variable
+Cued_Recall_df$HeadlineType2 <- 
+  ifelse(Cued_Recall_df$HeadlineType == "Correction", "Unlabeled Corrections",
+  ifelse(Cued_Recall_df$HeadlineType == "Correction_Label", "Labeled Corrections (E1 only)", 
+  ifelse(Cued_Recall_df$HeadlineType == "Misinformation_Label", "Labeled Fake News (E2 only)",
+  ifelse(Cued_Recall_df$HeadlineType == "Correction_Misinfo", "Fake News Reminders", ""))))
+         
+# Order factor levels
+Cued_Recall_df$HeadlineType %<>% 
+  factor(levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+
+Cued_Recall_df$HeadlineType2 %<>% 
+  factor(levels = c("Fake News Reminders", "Labeled Corrections (E1 only)", "Labeled Fake News (E2 only)", "Unlabeled Corrections"))
+
+Cued_Recall_df$ResponseType %<>% 
+  factor(levels = c("Real News Recall", "Intrusions of Fake News", "Fake News Recall"))
+
+```
+
+Figure 2: Combined Cued recall estimated probabilities only
+```{r Figure 2: Combined Cued recall estimated probabilities only, fig.height=4.5, fig.width=8}
+Fig2_p <-
+  Cued_Recall_df %>% 
+  ggplot(aes(x = ResponseType, y = prob, group = HeadlineType2)) +
+  facet_grid(. ~ Experiment, scales = "free") +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .75), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = HeadlineType2), position = position_dodge(width = .75), size = 3.5, shape = 21) +
+  scale_fill_manual(name = "Headline Type", values = c("#82D173", "#D0CFEC", "#FF934F", "#880D1E")) + 
+  scale_x_discrete(name = "Response Type",
+                     labels = c("Real News Recall" = expression(atop(paste("Correct Recall"),"Real News")),
+                                "Intrusions of Fake News" = expression(atop(paste("Intrusions"), "Fake News")),
+                                "Fake News Recall" = expression(atop(paste("Correct Recall"), "Fake News")))) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Response Probability") +
+  theme(legend.position = c(.84, .83),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 10.5),
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 9, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig2_p
+```
+
+```{r Combine Figure 2 panels, include = FALSE, fig.height=15, fig.width=10.5}
+ggsave('../Figures/Fig2.pdf', plot = Fig2_p, width = 8, height = 4.5, units = "in", dpi = 300, device = "pdf")
+```
+
+<font size = "3.5"> Model real news recall conditionalized on correction classification
+```{r Model real news recall conditionalized on correction classification}
+
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_Cond_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = Correction_Only_e1_df)
+
+# Wald's test
+Anova(Real_News_Recall_Cond_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_Cond_glmer_e1_emmeans <- emmeans(Real_News_Recall_Cond_glmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Cond_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_Cond_glmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Real_News_Recall_Cond_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_Cond_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = Correction_Only_e2_df)
+
+# Wald's test
+Anova(Real_News_Recall_Cond_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_Cond_glmer_e2_emmeans <- emmeans(Real_News_Recall_Cond_glmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Cond_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_Cond_glmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Real_News_Recall_Cond_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Combine real news recall conditionalized on correction classification data frames, echo = FALSE}
+# combine both experiments
+Real_News_Recall_Cond_emmeans_all_df <- 
+    bind_rows(Real_News_Recall_Cond_glmer_e1_emmeans_df, Real_News_Recall_Cond_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything())
+
+# Re-order factor levels
+Real_News_Recall_Cond_emmeans_all_df$HeadlineType %<>% 
+  factor(levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+
+Real_News_Recall_Cond_emmeans_all_df$Correction_Class_3 %<>% 
+  factor(levels = c("Fake News Recalled", "Correction + Fake News Not Recalled", "Not a Correction"))
+```
+
+```{r Create data frame to visualize real news recall conditionalized on correction classification, echo = FALSE, message = FALSE}
+
+## Experiment 1 ##
+
+# Compute counts and proportions
+(Point_Size_cnd_e1_df <- 
+  Correction_Only_e1_df %>%
+  group_by(HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(RN_Correct)) %>%
+  mutate(obs = n / sum(n)))
+  Point_Size_cnd_e1_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Compute counts and proportions
+(Point_Size_cnd_e2_df <- 
+  Correction_Only_e2_df %>%
+  group_by(HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(RN_Correct)) %>%
+  mutate(obs = n / sum(n)))
+  Point_Size_cnd_e2_df$Experiment <- "Experiment 2"
+
+## All Experiments
+
+# Combine point size data frames
+Point_Size_cnd_df <- bind_rows(Point_Size_cnd_e1_df, Point_Size_cnd_e2_df)
+
+# Combine point size with estimate data frames for real news recall
+Real_Recall_cnd_df_p <- 
+  left_join(Real_News_Recall_Cond_emmeans_all_df, Point_Size_cnd_df) %>%
+  select(HeadlineType, Correction_Class_3, n, obs, everything()) %>% 
+  select(-c(SE, df))
+
+# Create second HeadlineType variable
+Real_Recall_cnd_df_p$HeadlineType2 <- 
+  ifelse(Real_Recall_cnd_df_p$HeadlineType == "Correction", "Unlabeled Corrections",
+  ifelse(Real_Recall_cnd_df_p$HeadlineType == "Correction_Label", "Labeled Corrections (E1 only)", 
+  ifelse(Real_Recall_cnd_df_p$HeadlineType == "Misinformation_Label", "Labeled Fake News (E2 only)",
+  ifelse(Real_Recall_cnd_df_p$HeadlineType == "Correction_Misinfo", "Fake News Reminders", ""))))
+
+# Response type label
+Real_Recall_cnd_df_p$RespType <- "Real News Recall"
+```
+
+<font size = "3.5"> Model fake news intrusions conditionalized on correction classification
+```{r Model fake news intrusions conditionalized on correction classification}
+
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_Cond_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = subset(Correction_Only_e1_df, !Correction_Class_3 == "Fake News Recalled"))
+
+# Wald's test
+Anova(Fake_News_Intru_Cond_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Cond_glmer_e1_emmeans <- emmeans(Fake_News_Intru_Cond_glmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Cond_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_Cond_glmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Fake_News_Intru_Cond_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_Cond_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 * Correction_Class_3 | Subject) + (1 | Topic), 
+                              family = binomial, 
+                              control = moreControl, 
+                              data = subset(Correction_Only_e2_df, !Correction_Class_3 == "Fake News Recalled"))
+
+# Wald's test
+Anova(Fake_News_Intru_Cond_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Cond_glmer_e2_emmeans <- emmeans(Fake_News_Intru_Cond_glmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Cond_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_Cond_glmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Fake_News_Intru_Cond_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+```{r Combine fake news intrusions conditionalized on correction classification data frames, echo = FALSE}
+# combine both experiments
+Fake_News_Intru_Cond_emmeans_all_df <- 
+    bind_rows(Fake_News_Intru_Cond_glmer_e1_emmeans_df, Fake_News_Intru_Cond_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything())
+```
+
+```{r Create data frame to visualize fake news intrusions conditionalized on correction classification, echo = FALSE, message = FALSE}
+
+## Experiment 1 ##
+
+# Compute counts and proportions
+(Point_Size_Intru_cnd_e1_df <- 
+  Correction_Only_e1_df %>%
+  group_by(HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(FN_Intrusion)) %>%
+  mutate(obs = n / sum(n)))
+  Point_Size_Intru_cnd_e1_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Compute counts and proportions
+(Point_Size_Intru_cnd_e2_df <- 
+  Correction_Only_e2_df %>%
+  group_by(HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(FN_Intrusion)) %>%
+  mutate(obs = n / sum(n)))
+  Point_Size_Intru_cnd_e2_df$Experiment <- "Experiment 2"
+
+## All Experiments
+
+# Combine point size data frames
+Point_Size_Intru_cnd_df <- bind_rows(Point_Size_Intru_cnd_e1_df, Point_Size_Intru_cnd_e2_df)
+
+# Combine point size with estimate data frames for real news recall
+Fake_News_Intru_cnd_df_p <- 
+  left_join(Fake_News_Intru_Cond_emmeans_all_df, Point_Size_Intru_cnd_df) %>%
+  select(HeadlineType, Correction_Class_3, n, obs, everything()) %>% 
+  select(-c(SE, df))
+
+# Create second HeadlineType variable
+Fake_News_Intru_cnd_df_p$HeadlineType2 <- 
+  ifelse(Fake_News_Intru_cnd_df_p$HeadlineType == "Correction", "Unlabeled Corrections",
+  ifelse(Fake_News_Intru_cnd_df_p$HeadlineType == "Correction_Label", "Labeled Corrections (E1 only)", 
+  ifelse(Fake_News_Intru_cnd_df_p$HeadlineType == "Misinformation_Label", "Labeled Fake News (E2 only)",
+  ifelse(Fake_News_Intru_cnd_df_p$HeadlineType == "Correction_Misinfo", "Fake News Reminders", ""))))
+
+# Re-order factor levels
+Fake_News_Intru_cnd_df_p$HeadlineType %<>% 
+  factor(levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+
+Fake_News_Intru_cnd_df_p$Correction_Class_3 %<>% 
+  factor(levels = c("Correction + Fake News Not Recalled", "Not a Correction"))
+
+# Response type label
+Fake_News_Intru_cnd_df_p$RespType <- "Intrusions of Fake News"
+```
+
+Figure 3: Conditional recall (same plot)
+```{r Figure 3: Conditional recall (same plot), fig.height=7, fig.width=10}
+
+# Data frame
+All_recall_cnd_df <- bind_rows(Real_Recall_cnd_df_p, Fake_News_Intru_cnd_df_p)
+
+# Re-order factor levels
+All_recall_cnd_df$RespType %<>% factor(levels = c("Real News Recall", "Intrusions of Fake News"))
+
+# Plot
+Fig3.2_p <-
+  All_recall_cnd_df %>% 
+  ggplot(aes(x = Correction_Class_3, y = prob, group = HeadlineType2)) +
+  facet_grid(RespType ~ Experiment) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .75), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs, fill = HeadlineType2), position = position_dodge(width = .75), shape = 21) +
+  scale_fill_manual(name = "Headline Type", values = c("#82D173", "#D0CFEC", "#FF934F", "#880D1E")) + 
+  scale_size_area(max_size = 5) +
+  scale_x_discrete(name = "Classification Type",
+      labels = c("Fake News Recalled" = expression(atop(paste("Correction +"),"Fake News Recalled")),
+                 "Correction + Fake News Not Recalled" = expression(atop(paste("Correction +"), "Fake News Not Recalled"^" ")),
+                 "Not a Correction" = expression(atop(paste("Not a Correction +"), "Fake News Not Recalled")))) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.05, 1.05), breaks = seq(0, 1, .1)) +
+  labs(y = "Response Probability") +
+  theme(legend.position = c(.87, .90),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 10.5),
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 8.5, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3.2_p
+
+ggsave('../Figures/Fig3.pdf', plot = Fig3.2_p, width = 10, height = 7, units = "in", dpi = 300, device = "pdf")
+
+```
+
+<font size = "3.5"> Model belief rating for correct real news recall and fake news intrusions
+```{r Model belief rating for correct real news recall and fake news intrusions}
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Test_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Correction_Only_e1_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Test_lmer_e1_emmeans <- emmeans(Belief_Test_lmer_e1, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType | Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_lmer_e1_emmeans_df <- as_tibble(Belief_Test_lmer_e1_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+# Extract estimated probabilities
+Belief_Test_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + Memory_Classification * HeadlineType 
+                             + (1 | Subject) + (1 | Topic),
+                             data = subset(Correction_Only_e2_df, Memory_Classification == c("Real News Correct", "Fake News Intrusion")))
+
+# Wald's test
+Anova(Belief_Test_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Test_lmer_e2_emmeans <- emmeans(Belief_Test_lmer_e2, 
+                                           list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Memory_Classification,
+                                             pairwise ~ HeadlineType| Memory_Classification), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Test_lmer_e2_emmeans_df <- as_tibble(Belief_Test_lmer_e2_emmeans$`emmeans of HeadlineType | Memory_Classification`))
+
+# Add variable for experiment number
+Belief_Test_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+
+# Combine estimate ratings dfs
+Belief_Test_emmeans_all_df <- 
+    bind_rows(Belief_Test_lmer_e1_emmeans_df, Belief_Test_lmer_e2_emmeans_df) %>% 
+    select(Experiment, everything())
+
+```
+
+```{r Combine belief ratings at test data frames, echo = FALSE}
+
+## Experiment 1 ##
+
+# Compute counts and proportions
+(Point_Size_Belief_all_e1_df <- 
+  Correction_Only_e1_df %>%
+  group_by(HeadlineType, Memory_Classification) %>% 
+  summarise(n = length(Belief.RESP)) %>%
+  mutate(obs = n / sum(n)) %>% 
+  filter(Memory_Classification != "Other"))
+  Point_Size_Belief_all_e1_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Compute counts and proportions
+(Point_Size_Belief_all_e2_df <- 
+  Correction_Only_e2_df %>%
+  group_by(HeadlineType, Memory_Classification) %>%
+  summarise(n = length(Belief.RESP)) %>%
+  mutate(obs = n / sum(n)) %>% 
+  filter(Memory_Classification != "Other"))
+  Point_Size_Belief_all_e2_df$Experiment <- "Experiment 2"
+
+# Combine point size dfs
+Point_Size_Belief_Test_all_df <- 
+    bind_rows(Point_Size_Belief_all_e1_df, Point_Size_Belief_all_e2_df) %>% 
+    select(Experiment, everything())
+
+# Combine point size with estimate data frames
+Belief_Test_all_df_p <- 
+  left_join(Belief_Test_emmeans_all_df, Point_Size_Belief_Test_all_df) %>%
+  select(Memory_Classification, HeadlineType, n, obs, everything()) %>% 
+  select(-c(SE, df))
+
+# Change response type variable level names
+Belief_Test_all_df_p$Memory_Classification <- 
+  if_else(Belief_Test_all_df_p$Memory_Classification == "Real News Correct", "Real News Recall", "Intrusions of Fake News")
+
+# Re-order factor levels
+Belief_Test_all_df_p$HeadlineType <- 
+  factor(Belief_Test_all_df_p$HeadlineType, levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label","Correction"))
+
+Belief_Test_all_df_p$Memory_Classification <- 
+  factor(Belief_Test_all_df_p$Memory_Classification, levels = c("Real News Recall", "Intrusions of Fake News"))
+```
+
+<font size = "3.5"> Figure 5. Belief rating for correct real news recall and fake news intrusions 
+```{r Plot belief rating for correct real news recall and fake news intrusions data frames, echo=, fig.height=4.5, fig.width=8}
+Fig5_p <- 
+  Belief_Test_all_df_p %>%
+  ggplot(aes(x = HeadlineType, y = emmean, fill = Memory_Classification)) +
+  facet_grid(. ~ Experiment, scales = "free") +
+  geom_errorbar(color = "black", aes(ymin = lower.CL, ymax = upper.CL), position = position_dodge(width = .2), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs), shape = 21, position = position_dodge(width = .2)) +
+  scale_size_area(max_size = 6) +
+  scale_x_discrete(labels = 
+                 c("Correction_Misinfo" = "Fake News\nReminders", 
+                   "Correction_Label" = "Labeled\nCorrections",
+                   "Misinformation_Label" = "Labeled\nFake News",
+                   "Correction" = "Unlabeled\nCorrections")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(2.75, 5.75), breaks = seq(3.0, 5.5, 0.5)) +
+  scale_fill_manual(values = c("Real News Recall" = "#6DC0D5", "Intrusions of Fake News" = "#F85A3E")) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4), "Response Type")) +
+  labs(x = "Headline Type", y = "Belief Rating") +
+  theme(legend.position = c(.87, .88),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 10.5),
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.5, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 9, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+
+Fig5_p
+```
+
+```{r Save Figure 5, fig.height=4.5, fig.width=8, include=FALSE}
+ggsave('../Figures/Fig5.pdf', plot = Fig5_p, width = 8, height = 4.5, units = "in", dpi = 300, device = "pdf")
+```
+
+<font size = "3.5"> Model belief rating for correct real news recall conditionalized on correction classification
+```{r Model belief rating for correct real news recall conditionalized on correction classification}
+
+# Data frames with only real news recall
+Correction_Real_Recall_Only_e1_df <- Correction_Only_e1_df %>% filter(Memory_Classification == "Real News Correct")
+Correction_Real_Recall_Only_e2_df <- Correction_Only_e2_df %>% filter(Memory_Classification == "Real News Correct")
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Correct_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Correction_Real_Recall_Only_e1_df)
+
+# Wald's test
+Anova(Belief_Correct_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Correct_Cond_lmer_e1_emmeans <- emmeans(Belief_Correct_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType | Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Correct_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Correct_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Correction_Real_Recall_Only_e2_df)
+# Wald's test
+Anova(Belief_Correct_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Correct_Cond_lmer_e2_emmeans <- emmeans(Belief_Correct_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Correct_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Correct_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Correct_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+
+# Combine estimate ratings dfs
+Belief_Correct_Cond_lmer_all_emmeans_df <- 
+    bind_rows(Belief_Correct_Cond_lmer_e1_emmeans_df, Belief_Correct_Cond_lmer_e2_emmeans_df) %>% 
+    select(Experiment, everything())
+```
+
+```{r Create data frame to visualize belief ratings for real news recall conditionalized on correction classification, echo = FALSE, message = FALSE}
+
+## Experiment 1 ##
+
+# Compute counts and proportions
+(Point_Size_Belief_Correct_cnd_e1_df <- 
+  Correction_Only_e1_df %>%
+  group_by(Memory_Classification, HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(Belief.RESP)) %>%
+  mutate(obs = n / 1440) %>% 
+  filter(Memory_Classification == "Real News Correct"))
+  Point_Size_Belief_Correct_cnd_e1_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Compute counts and proportions
+(Point_Size_Belief_Correct_cnd_e2_df <- 
+  Correction_Only_e2_df %>%
+  group_by(Memory_Classification, HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(Belief.RESP)) %>%
+  mutate(obs = n / 1440) %>% 
+  filter(Memory_Classification == "Real News Correct"))
+  Point_Size_Belief_Correct_cnd_e2_df$Experiment <- "Experiment 2"
+
+## All Experiments
+
+# Combine point size data frames
+Point_Size_Belief_Correct_cnd_df <- bind_rows(Point_Size_Belief_Correct_cnd_e1_df, Point_Size_Belief_Correct_cnd_e2_df)
+
+# Combine point size with estimate data frames for real news recall
+(Belief_Correct_cnd_df_p <- 
+  left_join(Belief_Correct_Cond_lmer_all_emmeans_df, Point_Size_Belief_Correct_cnd_df) %>%
+  select(HeadlineType, Correction_Class_3, n, obs, everything()) %>% 
+  select(-c(SE, df)))
+
+# Create second HeadlineType variable
+Belief_Correct_cnd_df_p$HeadlineType2 <- 
+  ifelse(Belief_Correct_cnd_df_p$HeadlineType == "Correction", "Unlabeled Corrections",
+  ifelse(Belief_Correct_cnd_df_p$HeadlineType == "Correction_Label", "Labeled Corrections (E1 only)", 
+  ifelse(Belief_Correct_cnd_df_p$HeadlineType == "Misinformation_Label", "Labeled Fake News (E2 only)",
+  ifelse(Belief_Correct_cnd_df_p$HeadlineType == "Correction_Misinfo", "Fake News Reminders", ""))))
+
+# Add response type variable
+Belief_Correct_cnd_df_p$RespType <- "Real News Recall"
+
+# Re-order factor levels
+Belief_Correct_cnd_df_p$HeadlineType2 %<>% 
+  factor(levels = c("Fake News Reminders", "Labeled Corrections (E1 only)", "Labeled Fake News (E2 only)", "Unlabeled Corrections"))
+
+Belief_Correct_cnd_df_p$Correction_Class_3 %<>% 
+  factor(levels = c("Fake News Recalled", "Correction + Fake News Not Recalled", "Not a Correction"))
+
+(Belief_Correct_cnd_df_p %>% mutate_if(is.numeric, round, digits = 2))
+```
+
+<font size = "3.5"> Model belief rating for correct real news recall conditionalized on correction classification
+```{r Model belief rating for fake news intrusion conditionalized on correction classification}
+
+# Data frames with only fake news intrusions
+Correction_Intru_Only_e1_df <- 
+  Correction_Only_e1_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+Correction_Intru_Only_e2_df <- 
+  Correction_Only_e2_df %>% filter(Memory_Classification == "Fake News Intrusion", Correction_Class_3 != "Fake News Recalled") %>% droplevels()
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Intru_Cond_lmer_e1 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Correction_Intru_Only_e1_df)
+# Wald's test
+Anova(Belief_Intru_Cond_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Intru_Cond_lmer_e1_emmeans <- emmeans(Belief_Intru_Cond_lmer_e1, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Cond_lmer_e1_emmeans_df <- as_tibble(Belief_Intru_Cond_lmer_e1_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Cond_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Intru_Cond_lmer_e2 <- lmer(Belief.RESP ~ Attention_Sum + HeadlineType * Correction_Class_3 + 
+                                (1 | Subject) + (1 | Topic), 
+                              data = Correction_Intru_Only_e2_df)
+
+# Wald's test
+Anova(Belief_Intru_Cond_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Intru_Cond_lmer_e2_emmeans <- emmeans(Belief_Intru_Cond_lmer_e2, 
+                                        list(pairwise ~ HeadlineType, 
+                                             pairwise ~ Correction_Class_3,
+                                             pairwise ~ HeadlineType| Correction_Class_3), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Intru_Cond_lmer_e2_emmeans_df <- as_tibble(Belief_Intru_Cond_lmer_e2_emmeans$`emmeans of HeadlineType | Correction_Class_3`))
+
+# Add variable for experiment number
+Belief_Intru_Cond_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+
+# Combine estimate ratings dfs
+Belief_Intru_Cond_lmer_all_emmeans_df <- 
+    bind_rows(Belief_Intru_Cond_lmer_e1_emmeans_df, Belief_Intru_Cond_lmer_e2_emmeans_df) %>% 
+    select(Experiment, everything())
+```
+
+```{r Create data frame to visualize belief rating for fake news intrusion conditionalized on correction classification, echo = FALSE, message = FALSE}
+
+# Compute counts and proportions
+(Point_Size_Belief_Intrusion_cnd_e1_df <- 
+  Correction_Only_e1_df %>%
+  group_by(Memory_Classification, HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(Belief.RESP)) %>%
+  mutate(obs = n / 1440) %>% 
+  filter(Memory_Classification == "Fake News Intrusion"))
+  Point_Size_Belief_Intrusion_cnd_e1_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Compute counts and proportions
+(Point_Size_Belief_Intrusion_cnd_e2_df <- 
+  Correction_Only_e2_df %>%
+  group_by(Memory_Classification, HeadlineType, Correction_Class_3) %>% 
+  summarise(n = length(Belief.RESP)) %>%
+  mutate(obs = n / 1440) %>% 
+  filter(Memory_Classification == "Fake News Intrusion"))
+  Point_Size_Belief_Intrusion_cnd_e2_df$Experiment <- "Experiment 2"
+
+## All Experiments
+
+# Combine point size data frames
+Point_Size_Belief_Intru_cnd_df <- 
+  bind_rows(Point_Size_Belief_Intrusion_cnd_e1_df, Point_Size_Belief_Intrusion_cnd_e2_df) %>% 
+  filter(Correction_Class_3 != "Fake News Recalled")
+
+# Combine point size with estimate data frames for real news recall
+(Belief_Intru_cnd_df_p <- 
+  left_join(Belief_Intru_Cond_lmer_all_emmeans_df, Point_Size_Belief_Intru_cnd_df) %>%
+  select(HeadlineType, Correction_Class_3, n, obs, everything()) %>% 
+  select(-c(SE, df)))
+
+# Create second HeadlineType variable
+Belief_Intru_cnd_df_p$HeadlineType2 <- 
+  ifelse(Belief_Intru_cnd_df_p$HeadlineType == "Correction", "Unlabeled Corrections",
+  ifelse(Belief_Intru_cnd_df_p$HeadlineType == "Correction_Label", "Labeled Corrections (E1 only)", 
+  ifelse(Belief_Intru_cnd_df_p$HeadlineType == "Misinformation_Label", "Labeled Fake News (E2 only)",
+  ifelse(Belief_Intru_cnd_df_p$HeadlineType == "Correction_Misinfo", "Fake News Reminders", ""))))
+
+# Add response type variable
+Belief_Intru_cnd_df_p$RespType <- "Intrusions of Fake News"
+
+# Re-order factor levels
+Belief_Intru_cnd_df_p$HeadlineType2 %<>% 
+  factor(levels = c("Fake News Reminders", "Labeled Corrections (E1 only)", "Labeled Fake News (E2 only)", "Unlabeled Corrections"))
+
+Belief_Intru_cnd_df_p$Correction_Class_3 %<>% 
+  factor(levels = c("Fake News Recalled", "Correction + Fake News Not Recalled", "Not a Correction"))
+
+(Belief_Intru_cnd_df_p %>% mutate_if(is.numeric, round, digits = 2))
+```
+
+Figure 6: Conditional real news recall beliefs (same plot)
+```{r Figure 6: Conditional real news recall beliefs (same plot), fig.height=7, fig.width=10}
+
+# Data frame
+All_belief_cnd_df <- bind_rows(Belief_Correct_cnd_df_p, Belief_Intru_cnd_df_p)
+
+# Re-order factor levels
+All_belief_cnd_df$RespType %<>% factor(levels = c("Real News Recall", "Intrusions of Fake News"))
+
+# Plot
+Fig6_p <-
+  All_belief_cnd_df %>% 
+  ggplot(aes(x = Correction_Class_3, y = emmean, group = HeadlineType2)) +
+  facet_grid(RespType ~ Experiment) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), position = position_dodge(width = .75), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs, fill = HeadlineType2), position = position_dodge(width = .75), shape = 21) +
+  scale_fill_manual(name = "Headline Type", values = c("#82D173", "#D0CFEC", "#FF934F", "#880D1E")) + 
+  scale_size_area(max_size = 7) +
+  scale_x_discrete(name = "Classification Type",
+      labels = c("Fake News Recalled" = expression(atop(paste("Correction +"),"Fake News Recalled")),
+                 "Correction + Fake News Not Recalled" = expression(atop(paste("Correction +"), "Fake News Not Recalled"^" ")),
+                 "Not a Correction" = expression(atop(paste("Not a Correction +"), "Fake News Not Recalled")))) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(2.75, 5.75), breaks = seq(3.0, 5.5, 0.5)) +
+  labs(y = "Belief Rating") +
+  theme(legend.position = c(.125, .60),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 10.5),
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 8.5, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig6_p
+
+ggsave('../Figures/Fig6.pdf', plot = Fig6_p, width = 10, height = 7, units = "in", dpi = 300, device = "pdf")
+
+```
+
+<font size = "3.5"> Hypothesis E4: Bivariate correlations between CRT and measures of memory and beliefs
+```{r Hypothesis E4: Bivariate correlations between CRT and measures of memory and beliefs}
+
+## CRT and Memory ##
+
+# Data frame for Experiment 1
+memory_crt_e1_df <- 
+  Exp1_data_df %>%
+  filter(HeadlineType != "Repeated") %>% 
+  select(Subject, RN_Correct, FN_Intrusion, CRT_acc) %>% 
+  group_by(Subject) %>%
+  summarise(RN_Correct = mean(RN_Correct),
+            FN_Intrusion = mean(FN_Intrusion),
+            CRT_acc = mean(CRT_acc)) %>% 
+  ungroup() %>% 
+  select(-Subject)
+
+# Data frame for Experiment 2
+memory_crt_e2_df <- 
+  Exp2_data_df %>%
+  filter(HeadlineType != "Repeated") %>% 
+  select(Subject, RN_Correct, FN_Intrusion, CRT_acc) %>% 
+  group_by(Subject) %>%
+  summarise(RN_Correct = mean(RN_Correct),
+            FN_Intrusion = mean(FN_Intrusion),
+            CRT_acc = mean(CRT_acc)) %>% 
+  ungroup() %>% 
+  select(-Subject)
+
+# Data frame for Both Experiments
+memory_crt_e12_df <- bind_rows(memory_crt_e1_df, memory_crt_e2_df)
+
+# Bivariate correlations
+crt_memory_e12_rcor <- rcorr(as.matrix(memory_crt_e12_df))
+
+
+## CRT and Beliefs ##
+
+# Data frames for Experiment 1
+
+belief_df_e1 <-
+  Exp1_data_df %>% 
+  filter(HeadlineType != "Repeated", Memory_Classification == c("Real News Correct", "Fake News Intrusion")) %>% 
+  select(Subject, Memory_Classification, Belief.RESP, CRT_acc) %>% 
+  group_by(Subject, Memory_Classification) %>% 
+  summarise(Belief = mean(Belief.RESP), CRT_acc = mean(CRT_acc)) %>% 
+  pivot_wider(names_from = Memory_Classification, values_from = Belief) %>% 
+  na.omit() %>% 
+  rename("Real_News_Correct" = "Real News Correct",
+         "Fake_News_Intrusion" = "Fake News Intrusion") %>% 
+  mutate(Truth_Discernment = (Real_News_Correct - Fake_News_Intrusion))%>% 
+  ungroup() %>% 
+  select(-c(Subject, Real_News_Correct, Fake_News_Intrusion))
+
+# Data frames for Experiment 2
+
+belief_df_e2 <-
+  Exp2_data_df %>% 
+  filter(HeadlineType != "Repeated", Memory_Classification == c("Real News Correct", "Fake News Intrusion")) %>% 
+  select(Subject, Memory_Classification, Belief.RESP, CRT_acc) %>% 
+  group_by(Subject, Memory_Classification) %>% 
+  summarise(Belief = mean(Belief.RESP), CRT_acc = mean(CRT_acc)) %>% 
+  pivot_wider(names_from = Memory_Classification, values_from = Belief) %>% 
+  na.omit() %>% 
+  rename("Real_News_Correct" = "Real News Correct",
+         "Fake_News_Intrusion" = "Fake News Intrusion") %>% 
+  mutate(Truth_Discernment = (Real_News_Correct - Fake_News_Intrusion))%>% 
+  ungroup() %>% 
+  select(-c(Subject, Real_News_Correct, Fake_News_Intrusion))
+
+# Data frames for Both Experiments
+belief_e12_df <- bind_rows(belief_df_e1, belief_df_e2)
+
+# Bivariate correlations
+crt_belief_e12_rcor <- rcorr(as.matrix(belief_e12_df)) # truth discernment
+
+
+# ++++++++++++++++++++++++++++
+# flattenCorrMatrix
+# ++++++++++++++++++++++++++++
+# cormat : matrix of the correlation coefficients
+# pmat : matrix of the correlation p-values
+flattenCorrMatrix <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    row = rownames(cormat)[row(cormat)[ut]],
+    column = rownames(cormat)[col(cormat)[ut]],
+    cor  = (cormat)[ut],
+    p = pmat[ut]
+    )
+}
+
+# Memory / CRT correlations
+memory_crt_r_matrix <- flattenCorrMatrix(crt_memory_e12_rcor$r, crt_memory_e12_rcor$P)
+memory_crt_r_matrix %<>% filter(column != "FN_Intrusion") %>% rename(Outcome = row) %>% rename(CRT = column)
+memory_crt_r_matrix[, c(-1, -2)] <- round(memory_crt_r_matrix[ , c(-1, -2)], 5)
+memory_crt_r_matrix
+
+# Real News Recall Belief / CRT correlations
+belief_crt_r_matrix <- flattenCorrMatrix(crt_belief_e12_rcor$r, crt_belief_e12_rcor$P)
+belief_crt_r_matrix %<>% rename(CRT = row) %>% rename(Outcome = column)
+belief_crt_r_matrix[, c(-1, -2)] <- round(belief_crt_r_matrix[ , c(-1, -2)], 5)
+belief_crt_r_matrix
+
+# Flat correlation matrix
+flat_crt_r <- bind_rows(memory_crt_r_matrix, belief_crt_r_matrix)
+flat_crt_r %<>% select(CRT, everything())
+flat_crt_r
+```
+
+<font size = "3.5"> Data frames for CRT scatterplots
+```{r Data frames for CRT scatterplots}
+
+## CRT and Memory ##
+
+# Data frame for Experiment 1
+memory_crt_scatter_e1_df <- 
+  Exp1_data_df %>%
+  filter(HeadlineType != "Repeated") %>% 
+  select(Subject, RN_Correct, FN_Intrusion, CRT_acc) %>% 
+  group_by(Subject) %>%
+  summarise(RN_Correct = mean(RN_Correct),
+            FN_Intrusion = mean(FN_Intrusion),
+            CRT_acc = mean(CRT_acc)) %>% 
+  mutate(Experiment = "Experiment 1")
+
+# Data frame for Experiment 2
+memory_crt_scatter_e2_df <- 
+  Exp2_data_df %>%
+  filter(HeadlineType != "Repeated") %>% 
+  select(Subject, RN_Correct, FN_Intrusion, CRT_acc) %>% 
+  group_by(Subject) %>%
+  summarise(RN_Correct = mean(RN_Correct),
+            FN_Intrusion = mean(FN_Intrusion),
+            CRT_acc = mean(CRT_acc)) %>% 
+  mutate(Experiment = "Experiment 2")
+
+# Data frame for Both Experiments
+memory_crt_scatter_e12_df <- 
+  bind_rows(memory_crt_scatter_e1_df, memory_crt_scatter_e2_df) %>% 
+  pivot_longer(2:3, names_to = "Response", values_to = "Prop") %>% 
+  select(Experiment, Subject, Response, Prop, CRT_acc)
+
+# Change response level names
+memory_crt_scatter_e12_df$Response <- 
+  ifelse(memory_crt_scatter_e12_df$Response == "RN_Correct", "Real News Recall", "Intrusions of Fake News")
+
+## CRT and Beliefs ##
+
+# Data frame for Experiment 1
+
+belief_scatter_df_e1 <-
+  Exp1_data_df %>% 
+  filter(HeadlineType != "Repeated", Memory_Classification == c("Real News Correct", "Fake News Intrusion")) %>% 
+  select(Subject, Memory_Classification, Belief.RESP, CRT_acc) %>% 
+  group_by(Subject, Memory_Classification) %>% 
+  summarise(Belief = mean(Belief.RESP), 
+            CRT_acc = mean(CRT_acc)) %>% 
+  mutate(Experiment = "Experiment 1") %>% 
+  pivot_wider(names_from = Memory_Classification, values_from = Belief) %>% 
+  na.omit() %>% 
+  rename("Real_News_Correct" = "Real News Correct",
+         "Fake_News_Intrusion" = "Fake News Intrusion") %>% 
+  mutate(Truth_Discernment = (Real_News_Correct - Fake_News_Intrusion)/6)
+
+# Data frames for Experiment 2
+
+belief_scatter_df_e2 <-
+  Exp2_data_df %>% 
+  filter(HeadlineType != "Repeated", Memory_Classification == c("Real News Correct", "Fake News Intrusion")) %>% 
+  select(Subject, Memory_Classification, Belief.RESP, CRT_acc) %>% 
+  group_by(Subject, Memory_Classification) %>% 
+  summarise(Belief = mean(Belief.RESP), 
+            CRT_acc = mean(CRT_acc)) %>% 
+  mutate(Experiment = "Experiment 2") %>% 
+  pivot_wider(names_from = Memory_Classification, values_from = Belief) %>% 
+  na.omit() %>% 
+  rename("Real_News_Correct" = "Real News Correct",
+         "Fake_News_Intrusion" = "Fake News Intrusion") %>% 
+  mutate(Truth_Discernment = (Real_News_Correct - Fake_News_Intrusion)/6)
+
+# Data frames for Both Experiments
+belief_crt_scatter_e12_df <- 
+  bind_rows(belief_scatter_df_e1, belief_scatter_df_e2) %>% 
+  mutate(Response = "Truth Discernment") %>% 
+  rename(Prop = "Truth_Discernment") %>% 
+  select(Experiment, Subject, Response, Prop, CRT_acc)
+
+# Changes response level order
+memory_crt_scatter_e12_df$Response %<>% factor(levels = c("Real News Recall", "Intrusions of Fake News"))
+```
+
+<font size = "3.5">  Create data frames for correlation labels for each scatter plot
+```{r Create data frames for correlation labels for each scatter plot}
+memory_crt_scatter_text_df <- 
+  data.frame(Response = factor(c("Real News Recall", "Intrusions of Fake News"),
+                        levels = c("Real News Recall", "Intrusions of Fake News")),
+    label = c("italic(r)(192)=='.42'",
+              "italic(r)(192)=='-.26'"),
+   CRT_acc = 3,
+   Prop = 1, 
+    x_pos = c(.3, .3),
+  y_pos = c(.97, .97))
+memory_crt_scatter_text_df
+
+belief_crt_scatter_text_df <- 
+  data.frame(label = "italic(r)(172)=='-.01'",
+             CRT_acc = 3,
+             Prop = 1, 
+             x_pos = .3,
+             y_pos = .924)
+belief_crt_scatter_text_df
+
+```
+
+<font size = "3.5">  CRT and memory scatterplot
+```{r CRT and memory scatterplot, fig.height=4, fig.width=8}
+crt_mem_p <- 
+  memory_crt_scatter_e12_df %>% 
+  ggplot(aes(x = CRT_acc, y = Prop)) +
+  geom_point(aes(fill = Experiment), shape = 21, color = "white", size = 3, stroke = .3, position = position_jitter(width = 0.25, height = 0.01)) +
+  geom_smooth(aes(x = CRT_acc, y = Prop), color = "#2176FF", linetype = 1, size = .75, method = "lm", se = T, alpha = 0.3, inherit.aes = FALSE, show.legend = FALSE) +
+  scale_fill_manual(values = c("#F85A3E", "#2A1E5C")) +                  
+  scale_x_continuous(name = "Cognitive Reflection Test Accuracy", breaks = seq(0, 7, 1), limits = c(-0.5, 7.5)) +
+    scale_y_continuous(name = "Response Proportion", breaks = seq(0, 1, .1), limits = c(-0.05, 1.01)) +
+  facet_wrap(. ~ Response) +
+  guides(fill = guide_legend(override.aes = list(size = 3))) +
+  geom_text(data = memory_crt_scatter_text_df, aes(x = x_pos, y = y_pos, label = label), color = "black", size = 3, parse = TRUE) +
+  theme(legend.title = element_blank(),
+        legend.position = c(.913, .91),
+        legend.box = "vertical",
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 8.5, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+crt_mem_p
+
+```
+
+<font size = "3.5">  Figure 7 CRT and truth discernment scatterplot
+```{r Figure 7 CRT and truth discernment scatterplot, fig.height=4, fig.width=4}
+crt_truth_discern_p <- 
+  belief_crt_scatter_e12_df %>% 
+  ggplot(aes(x = CRT_acc, y = Prop)) +
+  geom_point(aes(fill = Experiment), shape = 21, color = "white", size = 3, stroke = .3, position = position_jitter(width = 0.25, height = 0.01)) +
+  geom_smooth(aes(x = CRT_acc, y = Prop), color = "#2176FF", linetype = 1, size = .75, method = "lm", se = T, alpha = 0.3, inherit.aes = FALSE, show.legend = FALSE) +
+  scale_fill_manual(values = c("#F85A3E", "#2A1E5C")) +                  
+  scale_x_continuous(name = "Cognitive Reflection Test Accuracy", breaks = seq(0, 7, 1), limits = c(-0.5, 7.5)) +
+  scale_y_continuous(name = "Discernment Score", breaks = seq(-.5, 1, .1), limits = c(-.4, 1)) +
+  guides(fill = guide_legend(override.aes = list(size = 3))) +
+  geom_text(data = belief_crt_scatter_text_df, aes(x = x_pos, y = y_pos, label = label), color = "black", size = 3, parse = TRUE) +
+  ggtitle("Truth Discernment") +
+  theme(legend.title = element_blank(),
+        legend.position = c(.84, .90),
+        legend.box = "vertical",
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 8.5, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 11, hjust = 0.5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+crt_truth_discern_p
+```
+
+Combining CRT memory and truth discernment scatterplots
+```{r Combining CRT memory and truth discernment scatterplots, fig.height=4.5, fig.width=12, echo = FALSE}
+crt_mem_truth_discern_p <- plot_grid(crt_mem_p, crt_truth_discern_p, labels = c('A.', 'B.'), ncol = 2, rel_widths = c(2, 1.2)) + 
+  theme(plot.tag = element_text(size = 20))
+
+ggsave("../Figures/Fig7.pdf", plot = crt_mem_truth_discern_p, width = 12, height =4.5, units = "in", dpi = 300)
+```
+
+########################################
+
+Supplementary Material
+
+########################################
+
+<font size = "3.5"> Model Phase 1 familiarity ratings
+```{r Model Phase 1 familiarity ratings}
+
+## Experiment 1 ##
+
+# Model specification
+Fam_Rating_lmer_e1 <- lmer(Familiarity.RESP ~ Attention_Sum + HeadlineType + 
+                         (1 | Subject) + (1 | Topic), 
+                         data = Exp1_data_df)
+
+# Wald's test
+Anova(Fam_Rating_lmer_e1)
+
+# Pairwise comparisons 
+(Fam_Rating_lmer_e1_emmeans <- emmeans(Fam_Rating_lmer_e1, 
+                                       pairwise ~ HeadlineType, type = "response"))
+
+# Extract model-estimated probabilities
+(Fam_Rating_lmer_e1_emmeans_df <- as_tibble(Fam_Rating_lmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fam_Rating_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fam_Rating_lmer_e2 <- lmer(Familiarity.RESP ~ Attention_Sum + HeadlineType + 
+                         (1 | Subject) + (1 | Topic), 
+                         data = Exp2_data_df)
+
+# Wald's test
+Anova(Fam_Rating_lmer_e2)
+
+# Pairwise comparisons 
+(Fam_Rating_lmer_e2_emmeans <- emmeans(Fam_Rating_lmer_e2, 
+                                       pairwise ~ HeadlineType, type = "response"))
+
+# Extract model-estimated probabilities
+(Fam_Rating_lmer_e2_emmeans_df <- as_tibble(Fam_Rating_lmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fam_Rating_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+<font size = "3.5"> Model Phase 1 belief baseline ratings
+```{r Model Phase 1 belief baseline ratings}
+
+## Experiment 1 ##
+
+# Model specification
+Belief_Base_Rating_lmer_e1 <- lmer(BeliefBase.RESP ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   data = Exp1_data_df)
+
+# Wald's test
+Anova(Belief_Base_Rating_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Base_Rating_lmer_e1_emmeans <- emmeans(Belief_Base_Rating_lmer_e1, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Belief_Base_Rating_lmer_e1_emmeans_df <- as_tibble(Belief_Base_Rating_lmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Belief_Base_Rating_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Belief_Base_Rating_lmer_e2 <- lmer(BeliefBase.RESP ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic),
+                                   data = Exp2_data_df)
+
+# Wald's test
+Anova(Belief_Base_Rating_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Base_Rating_lmer_e2_emmeans <- emmeans(Belief_Base_Rating_lmer_e2, 
+                                   pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Belief_Base_Rating_lmer_e2_emmeans_df <- as_tibble(Belief_Base_Rating_lmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Belief_Base_Rating_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+########################################################
+
+Exploratory analyses
+
+########################################################
+
+<font size = "3.5"> Hypothesis E1: Comparing belief ratings in phases 1 and 3
+```{r Hypothesis E1: Comparing belief ratings in phases 1 and 3}
+
+## Experiment 1 ##
+
+# Data frame for Experiment 1
+Belief_e1_df <- Exp1_data_df %>%
+  select(Subject, Topic, HeadlineType, BeliefBase.RESP, Belief.RESP, RN_Correct, FN_Intrusion) %>%
+  drop_na() %>% 
+  filter(!HeadlineType %in% c("Repeated"))
+Belief_e1_df
+
+# Create one column for belief ratings  
+Belief_e1_long_df <- 
+  pivot_longer(Belief_e1_df, cols=4:5, names_to = "Phase", values_to = "Belief_Rating")
+
+# Model specification
+Belief_Diff_Intru_lmer_e1 <- lmer(Belief_Rating ~ HeadlineType * Phase + 
+                          (1 | Subject) + (1 | Topic),  
+                        data = subset(Belief_e1_long_df, FN_Intrusion == 1))
+
+# Wald's test
+Anova(Belief_Diff_Intru_lmer_e1)
+
+# Pairwise comparisons 
+(Belief_Diff_Intru_lmer_e1_emmeans <- emmeans(Belief_Diff_Intru_lmer_e1, 
+                                             list(pairwise ~ HeadlineType,
+                                                  pairwise ~ Phase,
+                                                  pairwise ~ Phase | HeadlineType), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Diff_Intru_lmer_e1_emmeans_df <- as_tibble(Belief_Diff_Intru_lmer_e1_emmeans$`emmeans of Phase | HeadlineType`))
+
+# Add variable for experiment number
+Belief_Diff_Intru_lmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Data frame for Experiment 2
+Belief_e2_df <- Exp2_data_df %>%
+  select(Subject, Topic, HeadlineType, BeliefBase.RESP, Belief.RESP, RN_Correct, FN_Intrusion) %>%
+  drop_na() %>% 
+  filter(!HeadlineType %in% c("Repeated"))
+Belief_e2_df
+
+# Create one column for belief ratings  
+Belief_e2_long_df <- 
+  pivot_longer(Belief_e2_df, cols=4:5, names_to = "Phase", values_to = "Belief_Rating")
+
+# Model specification
+Belief_Diff_Intru_lmer_e2 <- lmer(Belief_Rating ~ HeadlineType * Phase + 
+                          (1 | Subject) + (1 | Topic),  
+                        data = subset(Belief_e2_long_df, FN_Intrusion == 1))
+
+# Wald's test
+Anova(Belief_Diff_Intru_lmer_e2)
+
+# Pairwise comparisons 
+(Belief_Diff_Intru_lmer_e2_emmeans <- emmeans(Belief_Diff_Intru_lmer_e2, 
+                                             list(pairwise ~ HeadlineType,
+                                                  pairwise ~ Phase,
+                                                  pairwise ~ Phase | HeadlineType,
+                                                  pairwise ~ HeadlineType | Phase), type = "response"))
+
+# Extract estimated probabilities
+(Belief_Diff_Intru_lmer_e2_emmeans_df <- as_tibble(Belief_Diff_Intru_lmer_e2_emmeans$`emmeans of Phase | HeadlineType`))
+
+# Add variable for experiment number
+Belief_Diff_Intru_lmer_e2_emmeans_df$Experiment <- "Experiment 2"
+```
+
+<font size = "3.5"> Hypothesis E2: Memory accuracy as a function of perceived truth
+```{r Hypothesis E2: Memory accuracy as a function of perceived truth - Real News Recall}
+
+# Data frame for Experiment 1
+Correction_Only_e1_df$Belief <- ifelse(Correction_Only_e1_df$Belief.RESP < 3, "False", "True")
+Correction_Only_True_e1_df <- Correction_Only_e1_df %>% filter(Belief == "True") %>% drop_na(Belief.RESP)
+
+# Data frame for Experiment 2
+Correction_Only_e2_df$Belief <- ifelse(Correction_Only_e2_df$Belief.RESP < 3, "False", "True")
+Correction_Only_True_e2_df <- Correction_Only_e2_df %>% filter(Belief == "True") %>% drop_na(Belief.RESP)
+
+## Real News Recall ##
+
+## Experiment 1 ##
+
+# Model specification
+Real_News_Recall_Belief_glmer_e1 <- glmer(RN_Correct ~ Attention_Sum * HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Correction_Only_True_e1_df)
+
+# Wald's test
+Anova(Real_News_Recall_Belief_glmer_e1)
+
+# Pairwise comparisons 
+(Real_News_Recall_Belief_glmer_e1_emmeans <- emmeans(Real_News_Recall_Belief_glmer_e1, 
+                                                          pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Belief_glmer_e1_emmeans_df <- as_tibble(Real_News_Recall_Belief_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_Belief_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Real_News_Recall_Belief_glmer_e2 <- glmer(RN_Correct ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Correction_Only_True_e2_df)
+
+# Wald's test
+Anova(Real_News_Recall_Belief_glmer_e2)
+
+# Pairwise comparisons 
+(Real_News_Recall_Belief_glmer_e2_emmeans <- emmeans(Real_News_Recall_Belief_glmer_e2, 
+                                                          pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Real_News_Recall_Belief_glmer_e2_emmeans_df <- as_tibble(Real_News_Recall_Belief_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Real_News_Recall_Belief_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+
+# Combine data frames together
+Real_News_Recall_Belief_emmeans_all_df <- 
+    bind_rows(Real_News_Recall_Belief_glmer_e1_emmeans_df, Real_News_Recall_Belief_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything()) 
+Real_News_Recall_Belief_emmeans_all_df$ResponseType <- "Real News Correct"
+
+# Re-order factor levels
+Real_News_Recall_Belief_emmeans_all_df$HeadlineType <- 
+  factor(Real_News_Recall_Belief_emmeans_all_df$HeadlineType, levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+```
+
+```{r Hypothesis E2: Memory accuracy as a function of perceived truth - Fake News Intrusions}
+## Experiment 1 ##
+
+# Model specification
+Fake_News_Intru_Belief_glmer_e1 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Correction_Only_True_e1_df)
+
+# Wald's test
+Anova(Fake_News_Intru_Belief_glmer_e1)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Belief_glmer_e1_emmeans <- emmeans(Fake_News_Intru_Belief_glmer_e1, 
+                                                          pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Belief_glmer_e1_emmeans_df <- as_tibble(Fake_News_Intru_Belief_glmer_e1_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_Belief_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Model specification
+Fake_News_Intru_Belief_glmer_e2 <- glmer(FN_Intrusion ~ Attention_Sum + HeadlineType + 
+                                     (1 | Subject) + (1 | Topic), 
+                                   family = binomial,
+                                   control = moreControl, 
+                                   data = Correction_Only_True_e2_df)
+
+# Wald's test
+Anova(Fake_News_Intru_Belief_glmer_e2)
+
+# Pairwise comparisons 
+(Fake_News_Intru_Belief_glmer_e2_emmeans <- emmeans(Fake_News_Intru_Belief_glmer_e2, 
+                                                          pairwise ~ HeadlineType, type = "response"))
+
+# Extract estimated probabilities
+(Fake_News_Intru_Belief_glmer_e2_emmeans_df <- as_tibble(Fake_News_Intru_Belief_glmer_e2_emmeans$emmeans)) 
+
+# Add variable for experiment number
+Fake_News_Intru_Belief_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+
+# Combine data frames together
+Fake_News_Intru_Belief_emmeans_all_df <- 
+    bind_rows(Fake_News_Intru_Belief_glmer_e1_emmeans_df, Fake_News_Intru_Belief_glmer_e2_emmeans_df) %>% 
+    select(Experiment, everything()) 
+Fake_News_Intru_Belief_emmeans_all_df$ResponseType <- "Fake News Intrusion"
+
+# Re-order factor levels
+Fake_News_Intru_Belief_emmeans_all_df$HeadlineType <- 
+  factor(Fake_News_Intru_Belief_emmeans_all_df$HeadlineType, levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+```
+
+```{r Combine recall for high and low belief data frames, echo = FALSE}
+# Combine response type dfs
+Recall_Belief_emmeans_all_df <- 
+    bind_rows(Real_News_Recall_Belief_emmeans_all_df, Fake_News_Intru_Belief_emmeans_all_df) %>% 
+    select(Experiment, everything()) 
+```
+
+```{r Combine belief ratings for correct recall at test data frames, echo = FALSE}
+
+## Experiment 1 ##
+
+# Compute counts and proportions
+(Point_Size_Recall_Belief_all_e1_df <- 
+  Correction_Only_True_e1_df %>%
+  group_by(HeadlineType, Memory_Classification) %>% 
+  summarise(n = length(RN_Correct)) %>%
+  mutate(obs = n / sum(n)) %>% 
+  filter(Memory_Classification != "Other"))
+  Point_Size_Recall_Belief_all_e1_df$Experiment <- "Experiment 1"
+
+## Experiment 2 ##
+
+# Compute counts and proportions
+(Point_Size_Recall_Belief_all_e2_df <- 
+  Correction_Only_True_e2_df %>%
+  group_by(HeadlineType, Memory_Classification) %>% 
+  summarise(n = length(RN_Correct)) %>%
+  mutate(obs = n / sum(n)) %>% 
+  filter(Memory_Classification != "Other"))
+  Point_Size_Recall_Belief_all_e2_df$Experiment <- "Experiment 2"
+
+# Combine dfs
+Point_Size_Recall_Belief_emmeans_all_df <- 
+    bind_rows(Point_Size_Recall_Belief_all_e1_df, Point_Size_Recall_Belief_all_e2_df) %>% 
+    select(Experiment, everything()) %>% 
+    rename(ResponseType = Memory_Classification)
+
+# Combine point size with estimate data frames
+Recall_Belief_all_df_p <- 
+  left_join(Point_Size_Recall_Belief_emmeans_all_df, Recall_Belief_emmeans_all_df) %>%
+  select(ResponseType, HeadlineType, n, obs, everything()) %>% 
+  select(-c(SE, df))
+
+# Create second HeadlineType variable
+Recall_Belief_all_df_p$HeadlineType2 <- 
+  ifelse(Recall_Belief_all_df_p$HeadlineType == "Correction", "Unlabeled Corrections",
+  ifelse(Recall_Belief_all_df_p$HeadlineType == "Correction_Label", "Labeled Corrections (E1 only)", 
+  ifelse(Recall_Belief_all_df_p$HeadlineType == "Misinformation_Label", "Labeled Fake News (E2 only)",
+  ifelse(Recall_Belief_all_df_p$HeadlineType == "Correction_Misinfo", "Fake News Reminders", ""))))
+         
+# Order factor levels
+Recall_Belief_all_df_p$HeadlineType %<>% 
+  factor(levels = c("Correction_Misinfo", "Correction_Label", "Misinformation_Label", "Correction"))
+
+Recall_Belief_all_df_p$HeadlineType2 %<>% 
+  factor(levels = c("Fake News Reminders", "Labeled Corrections (E1 only)", "Labeled Fake News (E2 only)", "Unlabeled Corrections"))
+
+Recall_Belief_all_df_p$ResponseType <- 
+  ifelse(Recall_Belief_all_df_p$ResponseType == "Real News Correct", "Real News Recall", "Intrusions of Fake News")
+         
+Recall_Belief_all_df_p$ResponseType %<>% factor(levels = c("Real News Recall", "Intrusions of Fake News"))
+```
+
+<font size = "3.5"> Figure S3. Memory accuracy for correct real news recall and fake news intrusions as a function of perceived truth
+```{r Figure S3. Plot Memory accuracy for correct real news recall and fake news intrusions as a function of perceived truth, echo=FALSE, fig.height=4.5, fig.width=8}
+FigS3_p <- 
+  Recall_Belief_all_df_p %>%
+  ggplot(aes(x = ResponseType, y = prob, group = HeadlineType2)) +
+  facet_grid(. ~ Experiment, scales = "free") +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .75), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = HeadlineType2), position = position_dodge(width = .75), size = 3.5, shape = 21) +
+  scale_fill_manual(name = "Headline Type", values = c("#82D173", "#D0CFEC", "#FF934F", "#880D1E")) + 
+  scale_x_discrete(name = "Response Type",
+                     labels = c("Real News Recall" = expression(atop(paste("Correct Recall"),"Real News")),
+                                "Intrusions of Fake News" = expression(atop(paste("Intrusions"), "Fake News")),
+                                "Fake News Recall" = expression(atop(paste("Correct Recall"), "Fake News")))) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Response Probability") +
+  theme(legend.position = c(.84, .83),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 10.5),
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 9, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+FigS3_p
+
+ggsave('../Figures/FigS3.pdf', plot = FigS3_p, width = 8, height = 4.5, units = "in", dpi = 300, device = "pdf")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

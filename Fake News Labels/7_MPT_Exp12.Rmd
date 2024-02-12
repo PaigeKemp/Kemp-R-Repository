@@ -1,0 +1,318 @@
+---
+title: "7_MPT_Exp12"
+author: "Vanessa Loaiza"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r Clear environment and set seed, echo = FALSE}
+# Clear environment
+rm(list = ls())
+
+# Set seed
+set.seed(100) 
+```
+
+<font size = "3.5"> Load packages
+```{r Load packages, message = FALSE, warning = FALSE}
+packages <- c("tidyverse", "TreeBUGS", "magrittr", "ggplot2")
+purrr::map(packages, library, character.only = TRUE)
+```
+
+<font size = "3.5"> Working directories and functions
+```{r Working directories and functions}
+# directories
+myDir <- dirname(rstudioapi::getSourceEditorContext()$path) # set to local directory
+setwd(myDir)
+
+# parameters for script
+seedReprod <- 123       # set a seed for reproducible results
+runModels  <- TRUE     # run the models?
+saveData   <- TRUE     # save the data?
+```
+
+```{r Read data frames and wrangle}
+# read in and manipulate/merge data
+data_Ex1 <- read_csv('../Data/clean_df_e1.csv') %>% 
+  select(Subject:SubTrial, HeadlineType, RN_Correct:RN_Error) %>%
+  rowwise %>%
+  mutate(Exp = 1, check = sum(c_across(RN_Correct:RN_Error)))
+data_Ex2 <- read_csv('../Data/clean_df_e2.csv') %>% 
+  select(Subject:SubTrial, HeadlineType, RN_Correct:RN_Error) %>%
+  rowwise %>%
+  mutate(Exp = 2, check = sum(c_across(RN_Correct:RN_Error)))
+
+data_all <- bind_rows(data_Ex1, data_Ex2) %>% relocate(Exp)
+data_all
+
+# checks for completeness
+sum(data_all$check)/nrow(data_all)
+table(data_all$Exp, data_all$Subject)
+table(data_all$Exp, data_all$HeadlineType)
+
+# how often are ambiguous responses happening?
+sum(data_all$RN_Ambiguous)/nrow(data_all)
+
+# we will remove those trials from the MPT analysis since they don't fit into any category
+data_all <- data_all %>% filter(RN_Ambiguous == 0) %>% select(-RN_Ambiguous)
+
+# we are also not analyzing the repeat condition in the models
+data_all <- data_all %>% filter(HeadlineType != "Repeated")
+
+# finally, to make it easy for later modeling, I'm going to temporarily rename things
+data_all <- data_all %>% 
+  mutate(HeadlineType_renamed = ifelse(HeadlineType == "Correction_Label", "Label",
+                                       ifelse(HeadlineType == "Misinformation_Label", "Label",
+                                              ifelse(HeadlineType == "Correction_Misinfo", "Reminder", HeadlineType)))) %>%
+  rename(Correct = RN_Correct, Intrusion = FN_Intrusion, Error = RN_Error)
+
+# checks
+data_all
+table(data_all$Exp, data_all$HeadlineType)
+table(data_all$Exp, data_all$HeadlineType_renamed)
+
+# reorganize data for MPT model -- frequency of responses for each headline type
+data_MPT <- data_all %>%
+  select(-c(SubTrial, HeadlineType, check)) %>%
+  group_by(Exp, Subject, HeadlineType_renamed) %>%
+  summarize_all(sum) %>%
+  pivot_wider(names_from = HeadlineType_renamed, values_from = Correct:Error)
+data_MPT 
+```
+
+# ************************************************************************************************************
+# MPT modeling -----------------------------------------------------------------------------------------------
+# ************************************************************************************************************
+
+<font size = "3.5"> Defining the model
+```{r Defining the model}
+# define the model equations directly within R
+model_eqn <- 
+  "# Fake News Independence Model
+   Correction   Correct_Correction    Pr_Correction
+   Correction   Correct_Correction    (1-Pr_Correction) * Pf_Correction * Gc
+   Correction   Intrusion_Correction  (1-Pr_Correction) * Pf_Correction * (1-Gc)
+   Correction   Correct_Correction    (1-Pr_Correction) * (1-Pf_Correction) * Gr * Gc
+   Correction   Intrusion_Correction  (1-Pr_Correction) * (1-Pf_Correction) * Gr * (1-Gc)
+   Correction   Error_Correction      (1-Pr_Correction) * (1-Pf_Correction) * (1-Gr)
+   Label        Correct_Label         Pr_Label
+   Label        Correct_Label         (1-Pr_Label) * Pf_Label * Gc
+   Label        Intrusion_Label       (1-Pr_Label) * Pf_Label * (1-Gc)
+   Label        Correct_Label         (1-Pr_Label) * (1-Pf_Label) * Gr * Gc
+   Label        Intrusion_Label       (1-Pr_Label) * (1-Pf_Label) * Gr * (1-Gc)
+   Label        Error_Label           (1-Pr_Label) * (1-Pf_Label) * (1-Gr)
+   Reminder     Correct_Reminder      Pr_Reminder
+   Reminder     Correct_Reminder      (1-Pr_Reminder) * Pf_Reminder * Gc
+   Reminder     Intrusion_Reminder    (1-Pr_Reminder) * Pf_Reminder * (1-Gc)
+   Reminder     Correct_Reminder      (1-Pr_Reminder) * (1-Pf_Reminder) * Gr * Gc
+   Reminder     Intrusion_Reminder    (1-Pr_Reminder) * (1-Pf_Reminder) * Gr * (1-Gc)
+   Reminder     Error_Reminder        (1-Pr_Reminder) * (1-Pf_Reminder) * (1-Gr)"
+
+# inspect the model
+readEQN(model_eqn, paramOrder = TRUE)
+
+# set restrictions
+readEQN(model_eqn, restrictions = list("Gc = 0.5", "Gr = 0.33333"), paramOrder = TRUE)
+```
+
+
+<font size = "3.5"> Test Heterogeneity
+```{r Test Heterogeneity}
+# Experiment 1
+# chi-square test
+testHetChi(freq = data_MPT[data_MPT$Exp == 1, -c(1:2)],
+           tree = c("T_Correction", "T_Correction", "T_Correction", 
+                    "T_Label", "T_Label", "T_Label",
+                    "T_Reminder", "T_Reminder", "T_Reminder"))
+# X^2(570) = 381.449, p = 1 --> not much heterogeneity between participants actually
+plotFreq(data_MPT[data_MPT$Exp == 1, -c(1:2)], eqn = model_eqn) # assess heterogeneity graphically
+
+# Experiment 2
+# chi-square test
+testHetChi(freq = data_MPT[data_MPT$Exp == 2, -c(1:2)],
+           tree = c("T_Correction", "T_Correction", "T_Correction", 
+                    "T_Label", "T_Label", "T_Label",
+                    "T_Reminder", "T_Reminder", "T_Reminder"))
+# X^2(570) = 408.9252, p = 0.9999 --> not much heterogeneity between participants actually
+plotFreq(data_MPT[data_MPT$Exp == 2, -c(1:2)], eqn = model_eqn) # assess heterogeneity graphically
+```
+
+
+<font size = "3.5"> Model fitting
+```{r Model fitting}
+nChains   <- 4       # number of chains
+nIters    <- 100000  # number of iterations per chain 
+nAdapt    <- 20000   # number of adaptation samples to adjust MCMC sampler in JAGS
+nBurnIn   <- 2000    # number of warm-up samples to be removed
+nThin     <- 5
+
+if (runModels) {
+  # E1
+  set.seed(seedReprod)
+  m1 <- traitMPT(eqnfile = model_eqn, 
+                 data = data_MPT[data_MPT$Exp == 1, -c(1:2)], 
+                 restrictions = list("Gc = 0.5", "Gr = 0.33333"),
+                 modelfilename = "MPT/E1_model.jags",
+                 parEstFile = "MPT/E1_model_results.txt",
+                 n.chain = nChains, n.iter = nIters, n.adapt = nAdapt,
+                 n.burnin = nBurnIn, n.thin = nThin, 
+                 ppp = 5000, dic = TRUE)
+  # E2
+  set.seed(seedReprod)
+  m2 <- traitMPT(eqnfile = model_eqn, 
+                 data = data_MPT[data_MPT$Exp == 2, -c(1:2)], 
+                 restrictions = list("Gc = 0.5", "Gr = 0.33333"),
+                 modelfilename = "MPT/E2_model.jags",
+                 parEstFile = "MPT/E2_model_results.txt",
+                 n.chain = nChains, n.iter = nIters, n.adapt = nAdapt,
+                 n.burnin = nBurnIn, n.thin = nThin, 
+                 ppp = 5000, dic = TRUE)
+  
+  if (saveData){
+    saveRDS(m1, file = "MPT/E1_model.rds")
+    saveRDS(m2, file = "MPT/E2_model.rds")
+  }
+} else {
+  m1 <- readRDS("MPT/E1_model.rds")
+  m2 <- readRDS("MPT/E2_model.rds")
+}
+
+# model summaries -- checking convergence by Rhat and model fit
+summary(m1)
+summary(m2)
+
+# plot to inspect convergence
+plot(m1)
+plot(m2)
+```
+
+<font size = "3.5"> Condition comparisons
+```{r Condition comparisons}
+# check for differences in parameters between the experimental conditions (manipulated within-subjects)
+wthn_E1 <- transformedParameters(m1, list("Pr_Rem_vs_Lab = Pr_Reminder - Pr_Label",
+                                          "Pr_Rem_vs_Cor = Pr_Reminder - Pr_Correction",
+                                          "Pr_Lab_vs_Cor = Pr_Label - Pr_Correction",
+                                          "Pf_Rem_vs_Lab = Pf_Reminder - Pf_Label",
+                                          "Pf_Rem_vs_Cor = Pf_Reminder - Pf_Correction",
+                                          "Pf_Lab_vs_Cor = Pf_Label - Pf_Correction"), level = "group")
+
+wthn_E2 <- transformedParameters(m2, list("Pr_Rem_vs_Lab = Pr_Reminder - Pr_Label",
+                                          "Pr_Rem_vs_Cor = Pr_Reminder - Pr_Correction",
+                                          "Pr_Lab_vs_Cor = Pr_Label - Pr_Correction",
+                                          "Pf_Rem_vs_Lab = Pf_Reminder - Pf_Label",
+                                          "Pf_Rem_vs_Cor = Pf_Reminder - Pf_Correction",
+                                          "Pf_Lab_vs_Cor = Pf_Label - Pf_Correction"), level = "group")
+summary(wthn_E1)
+summary(wthn_E2)
+
+if (saveData){
+  file2save <- "MPT/E1_model_results.txt"
+  cat("\n***********************************************", file = file2save, append = TRUE)
+  cat("\n***********************************************", file = file2save, append = TRUE)
+  cat("\nComparing the within-subjects effect of conditions for each headline\n", file = file2save, append = TRUE)
+  capture.output(summary(wthn_E1), file = file2save, append = TRUE)
+  file2save <- "MPT/E2_model_results.txt"
+  cat("\n***********************************************", file = file2save, append = TRUE)
+  cat("\n***********************************************", file = file2save, append = TRUE)
+  cat("\nComparing the within-subjects effect of conditions for each headline\n", file = file2save, append = TRUE)
+  capture.output(summary(wthn_E2), file = file2save, append = TRUE)
+}
+```
+
+```{r}
+m1 <- readRDS("MPT/E1_model.rds")
+m2 <- readRDS("MPT/E2_model.rds")
+```
+
+<font size = "3.5"> Plots
+```{r Plots}
+# plotting posteriors of the parameters for each condition, with individual points within each condition
+
+# get individual means for each condition/parameter, do some rejigging to make the plots sensible
+indivMeans_E1 <- as_tibble(getParam(m1, parameter = "theta", stat = "mean")) %>% 
+  rownames_to_column("ID") %>%
+  pivot_longer(!ID, names_to = "parm", values_to = "value") %>%
+  separate(col = parm, into = c("parm", "HeadlineType")) %>%
+  mutate(HeadlineType = ifelse(HeadlineType == "Label", "Labeled Corrections (E1 only)",
+                               ifelse(HeadlineType == "Correction", "Unlabeled Corrections", "Fake News Reminders")),
+         parm = factor(parm, labels = c("Familiarity", "Recollection")),
+         parm = factor(parm, levels = c("Recollection", "Familiarity")),
+         exp = "Experiment 1")
+
+indivMeans_E2 <- as_tibble(getParam(m2, parameter = "theta", stat = "mean")) %>% 
+  rownames_to_column("ID") %>%
+  pivot_longer(!ID, names_to = "parm", values_to = "value") %>%
+  separate(col = parm, into = c("parm", "HeadlineType")) %>%
+  mutate(HeadlineType = ifelse(HeadlineType == "Label", "Labeled Fake News (E2 only)",
+                               ifelse(HeadlineType == "Correction", "Unlabeled Corrections", "Fake News Reminders")),
+         parm = factor(parm, labels = c("Familiarity", "Recollection")),
+         parm = factor(parm, levels = c("Recollection", "Familiarity")),
+         exp = "Experiment 2")
+
+# one tibble for ease of plotting
+indivMeans <- bind_rows(indivMeans_E1, indivMeans_E2)  %>%
+  mutate(HeadlineType = as.factor(HeadlineType))
+indivMeans
+rm(indivMeans_E1, indivMeans_E2)
+
+# get group means, also doing analogous rejigging of above
+groupMeans_E1 <- as_tibble(getParam(m1, parameter = "mean", stat = "summary")) %>%
+  add_column(parm = c("Familiarity", "Familiarity", "Familiarity", "Recollection", "Recollection", "Recollection"),
+             HeadlineType = c("Unlabeled Corrections", "Labeled Corrections (E1 only)", "Fake News Reminders",
+                              "Unlabeled Corrections", "Labeled Corrections (E1 only)", "Fake News Reminders")) %>%
+  mutate(parm = factor(parm, levels = c("Recollection", "Familiarity")),
+         exp = "Experiment 1") %>%
+  rename(value = Mean, lowerCI = `2.5%`, upperCI = `97.5%`)
+groupMeans_E2 <- as_tibble(getParam(m2, parameter = "mean", stat = "summary")) %>%
+  add_column(parm = c("Familiarity", "Familiarity", "Familiarity", "Recollection", "Recollection", "Recollection"),
+             HeadlineType = c("Unlabeled Corrections", "Labeled Fake News (E2 only)", "Fake News Reminders",
+                              "Unlabeled Corrections", "Labeled Fake News (E2 only)", "Fake News Reminders")) %>%
+  mutate(parm = factor(parm, levels = c("Recollection", "Familiarity")),
+         exp = "Experiment 2") %>%
+  rename(value = Mean, lowerCI = `2.5%`, upperCI = `97.5%`)
+
+# one tibble for ease of plotting
+groupMeans <- bind_rows(groupMeans_E1, groupMeans_E2) %>%
+  mutate(HeadlineType = as.factor(HeadlineType))
+groupMeans
+rm(groupMeans_E1, groupMeans_E2)
+
+# plot
+plot_MPT <- ggplot(data = groupMeans, aes(x = parm, y = value, fill = HeadlineType)) + 
+  facet_grid(. ~ exp) +
+  geom_errorbar(aes(ymin = lowerCI, ymax = upperCI), position = position_dodge(width = 0.75), size = 0.3, width = 0) +
+  geom_point(aes(fill = HeadlineType), position = position_dodge(width = 0.75), size = 3.5, shape = 21) +
+  scale_fill_manual(name = "Headline Type", values = c("#82D173", "#D0CFEC", "#FF934F", "#880D1E")) + 
+  #geom_point(data = indivMeans, aes(fill = HeadlineType), position = position_jitterdodge(dodge.width = 0.75), alpha = 0.1) +
+  scale_y_continuous(name = "Posterior Parameter Estimate", limits = c(0, 1), breaks = seq(0, 1, 0.1)) +
+  xlab("Parameter") +
+  theme(legend.position = c(.85, .84),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 10.5),
+        legend.text = element_text(size = 8.75),
+        legend.key = element_rect(fill = "white"),
+        legend.key.width = unit(.1, 'cm'),
+        legend.key.height = unit(.425, 'cm'), 
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 11, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 11, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"), 
+        axis.text.x=element_text(size = 8.5, color = "black"),
+        axis.text.y=element_text(size = 9, color = "black"),
+        axis.title.x=element_text(size = 11, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 11, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+plot_MPT  
+
+if (saveData){
+  ggsave('../Figures/Fig4.pdf', plot = plot_MPT, width = 8, height = 4.5, units = "in", dpi = 300, device = "pdf")
+}
+```
+
+

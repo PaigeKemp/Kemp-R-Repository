@@ -1,0 +1,67 @@
+---
+title: <font size = "5"> Cognitive Reflection Task
+author: "Chris Wahlheim"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r Clear environment and set seed, echo = FALSE}
+# Clear environment
+rm(list = ls())
+
+# Set seed
+set.seed(100) 
+```
+
+<font size = "3.5"> Load packages
+```{r Load packages, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(magrittr)
+```
+
+<font size = "3.5"> Global optimizer variable
+```{r Global optimizer variable}
+moreControl <- glmerControl(optCtrl=list(maxfun=2e6), optimizer="bobyqa")
+```
+
+
+```{r, Read data frames, message = FALSE}
+Exp1_data_df <- read.csv('../Data/Exp1_Data(n=97).csv', encoding = "UTF-8") %>% rename(Phase = Phase.Trial.) %>% filter(Subject != 199)
+Exp2_data_df <- read.csv('../Data/Exp2_Data(n=97).csv', encoding = "UTF-8") %>% rename(Phase = Phase.Trial.) %>% filter(Subject != 197)
+```
+
+```{r, Select only the relevant variables of interest}
+
+# Experiment 1
+Exp1_data_crt_trim_df <- 
+  Exp1_data_df %>%
+  filter(Phase == "CognitiveReflectTest") %>% 
+  select(Subject, Phase, CogTestTitle, CogTestQuestion, CogTestAnswer, CogQuestion.RESP) %>% 
+  mutate(Experiment = "Experiment 1") %>% 
+  select(Experiment, everything()) %>% 
+  mutate(CRT_acc = case_when(CogTestAnswer == CogQuestion.RESP ~ 1, CogTestAnswer != CogQuestion.RESP ~ 0)) %>% 
+  group_by(Experiment, Subject) %>% 
+  summarise(CRT_acc = sum(CRT_acc))
+
+# Experiment 2
+Exp2_data_crt_trim_df <- 
+  Exp2_data_df %>%
+  filter(Phase == "CognitiveReflectTest") %>% 
+  select(Subject, Phase, CogTestTitle, CogTestQuestion, CogTestAnswer, CogQuestion.RESP) %>% 
+  mutate(Experiment = "Experiment 2") %>% 
+  select(Experiment, everything()) %>% 
+  mutate(CRT_acc = case_when(CogTestAnswer == CogQuestion.RESP ~ 1, CogTestAnswer != CogQuestion.RESP ~ 0)) %>% 
+  group_by(Experiment, Subject) %>% 
+  summarise(CRT_acc = sum(CRT_acc))
+
+```
+
+# Write Data frames
+```{r Write Data frame}
+write.csv(Exp1_data_crt_trim_df, '../Data/crt_df_e1.csv', row.names = FALSE)
+write.csv(Exp2_data_crt_trim_df, '../Data/crt_df_e2.csv', row.names = FALSE)
+```
+
+
+
+
