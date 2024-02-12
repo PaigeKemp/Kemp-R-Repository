@@ -1,6 +1,6 @@
 ---
 title: <font size = "5"> Cognitive Reflection Task
-author: "Chris Wahlheim"
+author: "Paige Kemp"
 date: "`r Sys.Date()`"
 output: html_document
 ---
