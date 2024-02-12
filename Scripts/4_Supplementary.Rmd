@@ -1,0 +1,206 @@
+---
+title: "Testing Enhances Episodic Memory Updating in Younger and Older Adults"
+author: "Paige Kemp & Chris Wahlheim"
+Date: "`r Sys.Date()`"
+output:
+  html_document:
+   toc: true
+   toc_float: true
+  pdf_document: default
+---
+
+```{r Clean environment}
+rm(list=ls())
+```
+
+```{r Install and load packages}
+# Install pacman
+if(!require("pacman")) install.packages("pacman")
+
+# Load packages
+pacman::p_load("janitor", "tidyverse", "magrittr", "lme4", "car", "emmeans", "patchwork", "Hmisc")
+```
+
+```{r Turn Off Scientific Notation}
+options(scipen = 999)
+```
+
+```{r Global variables}
+# glmer optimizer
+more_control <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+
+# Colors
+younger_all_color <- "#dd7011"
+older_all_color <- "#A846A0"
+```
+
+```{r Read data frames, message = FALSE}
+# Experiment 1 data frames
+Exp1_Inter_Data_df <- read_csv('../Data/Exp1_Interpolated_data.csv')
+Exp1_Test_Data_df <- read_csv('../Data/Exp1_Test_data.csv')
+
+# Experiment 2 data frames
+Exp2_Inter_Data_df <- read_csv('../Data/Exp2_Interpolated_data.csv')
+Exp2_Test_Data_df <- read_csv('../Data/Exp2_Test_data.csv')
+```
+
+```{r Sample sizes, echo = FALSE, message = FALSE}
+# Interpolated test phase data frame
+Exp1_Inter_Data_n <- Exp1_Inter_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_Inter_Data_n <- Exp2_Inter_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+
+# Test phase data frame
+Exp1_Test_Data_n <- Exp1_Test_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_Test_Data_n <- Exp2_Test_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+```
+
+```{r Join interpolated and test phase data frames}
+# Experiment 1
+e1_df <- Exp1_Inter_Data_df %>%
+  select(-Target) %>% 
+  full_join(Exp1_Test_Data_df, by = c("Subject", "AgeGroup", "Cue", "ItemType"))
+
+# Experiment 2
+e2_df <- Exp2_Inter_Data_df %>%
+  select(-Target) %>% 
+  full_join(Exp2_Test_Data_df, by = c("Subject", "AgeGroup", "Cue", "ItemType"))
+```
+
+```{r Clean variable names}
+# Experiment 1
+e1_df %<>% clean_names()  
+
+# Experiment 1
+e2_df %<>% clean_names()  
+```
+
+```{r}
+# Mutate 
+e1_df$fragment_completions <- 
+  ifelse(e1_df$raw_fragment_spaces == 1, "1",
+  ifelse(e1_df$raw_fragment_spaces == 2, "2", "3+"))
+
+e2_df$fragment_completions <- 
+  ifelse(e2_df$raw_fragment_spaces == 1, "1",
+  ifelse(e2_df$raw_fragment_spaces == 2, "2", "3+"))
+```
+
+```{r Set factors}
+# Experiment 1
+e1_df %<>% mutate_at(c("age_group", "subject", "cue", "item_type", "fragment_completions"), factor)
+
+# Experiment 2
+e2_df %<>% mutate_at(c("age_group", "subject", "cue", "item_type", "fragment_completions"), factor)
+```
+
+```{r Create subsetted data frames}
+# Experiment 1
+e1_no_rep_df <- e1_df %>% filter(!item_type == "AB_AB") %>% droplevels ## without repeated items
+e1_inter_only_df <- e1_df %>% filter(item_type %in% c("AB_AD_Test", "AB_AD_Test_FB")) %>% droplevels ## interpolated items
+e1_test_only_df <- e1_df %>% filter(item_type %in% c("AB_AD_Test")) %>% droplevels ## interpolated items
+e1_chng_only_df <- e1_df %>% filter(item_type %in% c("AB_AD", "AB_AD_Test", "AB_AD_Test_FB")) %>% droplevels ## changed items
+e1_chng_rec_df <- e1_chng_only_df %>% filter(change_class == "Change Recollected") %>% droplevels ## change recollected
+e1_chng_rem_df <- e1_chng_only_df %>% filter(change_class == "Change Remembered") %>% droplevels ## change remembered
+e1_no_chng_df <- e1_chng_only_df %>% filter(change_class == "Change Not Remembered") %>% droplevels ## change not remembered
+
+# Experiment 2
+e2_no_rep_df <- e2_df %>% filter(!item_type == "AB_AB") %>% droplevels ## without repeated items
+e2_inter_only_df <- e2_df %>% filter(item_type %in% c("AB_AD_Test", "AB_AD_Restudy")) %>% droplevels ## interpolated items
+e2_test_only_df <- e2_df %>% filter(item_type %in% c("AB_AD_Test")) %>% droplevels ## interpolated items
+e2_chng_only_df <- e2_df %>%  filter(item_type %in% c("AB_AD", "AB_AD_Test", "AB_AD_Restudy")) %>% droplevels ## changed items
+e2_chng_rec_df <- e2_chng_only_df %>% filter(change_class == "Change Recollected") %>% droplevels ## change recollected
+e2_chng_rem_df <- e2_chng_only_df %>% filter(change_class == "Change Remembered") %>% droplevels ## change remembered
+e2_no_chng_df <- e2_chng_only_df %>%  filter(change_class == "Change Not Remembered") %>% droplevels ## change not remembered
+```
+
+```{r Model interpolated recall (experiment 1)}
+# Model specification
+L1_inter_Recall_glmer_e1 <- 
+  glmer(l1_inter_test_acc ~ age_group * fragment_completions + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e1_test_only_df, control = more_control)
+
+# Wald's test
+Anova(L1_inter_Recall_glmer_e1)
+
+# Pairwise comparisons 
+(L1_inter_Recall_glmer_e1_emmeans <- 
+    emmeans(L1_inter_Recall_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ fragment_completions,
+                 pairwise ~ fragment_completions | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L1_inter_Recall_glmer_e1_emmeans_df <- as_tibble(L1_inter_Recall_glmer_e1_emmeans$`emmeans of fragment_completions | age_group`))
+```
+
+```{r Model list 2 recall (experiment 1)}
+# Model specification
+L2_Recall_glmer_e1 <- 
+  glmer(l2_test_acc ~ age_group * fragment_completions + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e1_test_only_df)
+
+# Wald's test
+Anova(L2_Recall_glmer_e1)
+
+# Pairwise comparisons 
+(L2_Recall_glmer_e1_emmeans <- 
+    emmeans(L2_Recall_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ fragment_completions,
+                 pairwise ~ fragment_completions | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_glmer_e1_emmeans_df <- as_tibble(L2_Recall_glmer_e1_emmeans$`emmeans of fragment_completions | age_group`))
+```
+
+
+```{r Model interpolated recall (experiment 2)}
+# Model specification
+L1_inter_Recall_glmer_e2 <- 
+  glmer(l1_inter_test_acc ~ age_group * fragment_completions + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e2_test_only_df, control = more_control)
+
+# Wald's test
+Anova(L1_inter_Recall_glmer_e2)
+
+# Pairwise comparisons 
+(L1_inter_Recall_glmer_e2_emmeans <- 
+    emmeans(L1_inter_Recall_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ fragment_completions, 
+                 pairwise ~ fragment_completions | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L1_inter_Recall_glmer_e2_emmeans_df <- as_tibble(L1_inter_Recall_glmer_e2_emmeans$`emmeans of fragment_completions | age_group`))
+```
+
+```{r Model list 2 recall (experiment 2)}
+# Model specification
+L2_Recall_glmer_e2 <- 
+  glmer(l2_test_acc ~ age_group * fragment_completions + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e2_test_only_df, control = more_control)
+
+# Wald's test
+Anova(L2_Recall_glmer_e2)
+
+# Pairwise comparisons 
+(L2_Recall_glmer_e2_emmeans <- 
+    emmeans(L2_Recall_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ fragment_completions,
+                 pairwise ~ fragment_completions | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_glmer_e2_emmeans_df <- as_tibble(L2_Recall_glmer_e2_emmeans$`emmeans of fragment_completions | age_group`))
+```
+
+
+

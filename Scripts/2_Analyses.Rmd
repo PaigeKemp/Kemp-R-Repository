@@ -1,0 +1,1022 @@
+---
+title: "Testing Enhances Episodic Memory Updating in Younger and Older Adults"
+author: "Paige Kemp & Chris Wahlheim"
+Date: "`r Sys.Date()`"
+output:
+  html_document:
+   toc: true
+   toc_float: true
+  pdf_document: default
+---
+
+```{r Clean environment}
+rm(list=ls())
+```
+
+```{r Install and load packages}
+# Install pacman
+if(!require("pacman")) install.packages("pacman")
+
+# Load packages
+pacman::p_load("janitor", "tidyverse", "magrittr", "lme4", "car", "emmeans", "patchwork", "Hmisc")
+```
+
+```{r Turn Off Scientific Notation}
+options(scipen = 999)
+```
+
+```{r Global variables}
+# glmer optimizer
+more_control <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e4))
+
+# Colors
+younger_all_color <- "#475cbc" #"#dd7011"
+older_all_color <- "#f64253" #A846A0"
+```
+
+```{r Read data frames, message = FALSE}
+# Experiment 1 data frames
+Exp1_Inter_Data_df <- read_csv('../Data/Exp1_Interpolated_data.csv')
+Exp1_Test_Data_df <- read_csv('../Data/Exp1_Test_data.csv')
+
+# Experiment 2 data frames
+Exp2_Inter_Data_df <- read_csv('../Data/Exp2_Interpolated_data.csv')
+Exp2_Test_Data_df <- read_csv('../Data/Exp2_Test_data.csv')
+```
+
+```{r Sample sizes, echo = FALSE, message = FALSE}
+# Interpolated test phase data frame
+Exp1_Inter_Data_n <- Exp1_Inter_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_Inter_Data_n <- Exp2_Inter_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+
+# Test phase data frame
+Exp1_Test_Data_n <- Exp1_Test_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_Test_Data_n <- Exp2_Test_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+```
+
+```{r Join interpolated and test phase data frames}
+# Experiment 1
+e1_df <- Exp1_Inter_Data_df %>%
+  select(-Target) %>% 
+  full_join(Exp1_Test_Data_df, by = c("Subject", "AgeGroup", "Cue", "ItemType"))
+
+# Experiment 2
+e2_df <- Exp2_Inter_Data_df %>%
+  select(-Target) %>% 
+  full_join(Exp2_Test_Data_df, by = c("Subject", "AgeGroup", "Cue", "ItemType"))
+```
+
+```{r Clean variable names}
+# Experiment 1
+e1_df %<>% clean_names()  
+
+# Experiment 1
+e2_df %<>% clean_names()  
+```
+
+```{r Set factors}
+# Experiment 1
+e1_df %<>% mutate_at(c("age_group", "subject", "cue", "item_type"), factor)
+
+# Experiment 2
+e2_df %<>% mutate_at(c("age_group", "subject", "cue", "item_type"), factor)
+```
+
+```{r Create subsetted data frames}
+# Experiment 1
+e1_no_rep_df <- e1_df %>% filter(!item_type == "AB_AB") %>% droplevels ## without repeated items
+e1_inter_only_df <- e1_df %>% filter(item_type %in% c("AB_AD_Test", "AB_AD_Test_FB")) %>% droplevels ## interpolated items
+e1_chng_only_df <- e1_df %>% filter(item_type %in% c("AB_AD", "AB_AD_Test", "AB_AD_Test_FB")) %>% droplevels ## changed items
+e1_chng_rec_df <- e1_chng_only_df %>% filter(change_class == "Change Recollected") %>% droplevels ## change recollected
+e1_chng_rem_df <- e1_chng_only_df %>% filter(change_class == "Change Remembered") %>% droplevels ## change remembered
+e1_no_chng_df <- e1_chng_only_df %>% filter(change_class == "Change Not Remembered") %>% droplevels ## change not remembered
+
+# Experiment 2
+e2_no_rep_df <- e2_df %>% filter(!item_type == "AB_AB") %>% droplevels ## without repeated items
+e2_tested_only_df <- e2_df %>% filter(item_type %in% c("AB_AD_Test")) %>% droplevels ## tested items
+e2_chng_only_df <- e2_df %>%  filter(item_type %in% c("AB_AD", "AB_AD_Test", "AB_AD_Restudy")) %>% droplevels ## changed items
+e2_chng_rec_df <- e2_chng_only_df %>% filter(change_class == "Change Recollected") %>% droplevels ## change recollected
+e2_chng_rem_df <- e2_chng_only_df %>% filter(change_class == "Change Remembered") %>% droplevels ## change remembered
+e2_no_chng_df <- e2_chng_only_df %>%  filter(change_class == "Change Not Remembered") %>% droplevels ## change not remembered
+```
+
+# Models for Experiment 1
+```{r Model interpolated recall (experiment 1)}
+# Model specification
+Inter_Recall_glmer_e1 <- 
+  glmer(l1_inter_test_acc ~ age_group * item_type + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e1_inter_only_df)
+
+# Wald's test
+Anova(Inter_Recall_glmer_e1)
+
+# Pairwise comparisons 
+(Inter_Recall_glmer_e1_emmeans <- 
+    emmeans(Inter_Recall_glmer_e1, 
+            list(pairwise ~ item_type,
+                 pairwise ~ age_group,
+                 pairwise ~ item_type | age_group), type = "response"))
+
+# Extract estimated probabilities
+(Inter_Recall_glmer_e1_emmeans_df <- as_tibble(Inter_Recall_glmer_e1_emmeans$`emmeans of item_type | age_group`))
+
+# Add variable for experiment number
+Inter_Recall_glmer_e1_emmeans_df$Experiment <- "Experiment 1"
+```
+
+```{r Model list 2 recall (experiment 1)}
+# Model specification
+L2_Recall_glmer_e1 <- 
+  glmer(l2_test_acc ~ age_group * item_type + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e1_no_rep_df)
+
+# Wald's test
+Anova(L2_Recall_glmer_e1)
+
+# Pairwise comparisons 
+(L2_Recall_glmer_e1_emmeans <- 
+    emmeans(L2_Recall_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type,
+                 pairwise ~ item_type | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_glmer_e1_emmeans_df <- as_tibble(L2_Recall_glmer_e1_emmeans$`emmeans of age_group | item_type`))
+```
+
+```{r Create data frames to visualize list 2 recall (experiment 1), echo = FALSE}
+# Create second ItemType variable
+L2_Recall_glmer_e1_emmeans_df$item_type_2 <- 
+  ifelse(L2_Recall_glmer_e1_emmeans_df$item_type == "AB_CD", "---, C-D\nControl",
+  ifelse(L2_Recall_glmer_e1_emmeans_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(L2_Recall_glmer_e1_emmeans_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(L2_Recall_glmer_e1_emmeans_df$item_type == "AB_AD_Test_FB", "A-B, A-D\nTested FB", ""))))
+
+# Re-order factor levels
+L2_Recall_glmer_e1_emmeans_df$item_type_2 %<>% 
+  factor(levels = c("---, C-D\nControl", "A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nTested FB"))
+
+L2_Recall_glmer_e1_emmeans_df$age_group %<>% 
+  factor(levels = c("Younger", "Older"))
+```
+
+```{r Figure 2: panel A list 2 recall (experiment 1), fig.height=4, fig.width=4}
+# Legend text
+Fig2a_age_text <- 
+  data.frame(
+    age_group = c("Younger", "Older"),
+    x_pos = c(.54, .80),
+    y_pos = c(.56, .155))
+
+# Plot
+Fig2a_p <-
+  L2_Recall_glmer_e1_emmeans_df %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .3), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group), position = position_dodge(width = .3), size = 3.5, shape = 21) +
+  geom_text(data = Fig2a_age_text, aes(x = x_pos, y = y_pos, label = age_group), 
+            hjust = 0, size = 4.5, color = c(younger_all_color, older_all_color)) +
+  scale_fill_manual(name = "Age Group", values = c(younger_all_color, older_all_color)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "List 2 Recall", x = "Item Type") +
+  theme(legend.position = "none",
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .4, color = "black"), 
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 13, hjust = .5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig2a_p
+```
+
+```{r Model intrusions from list 1 (experiment 1)}
+# Model specification
+L1_Intru_glmer_e1 <- 
+  glmer(l1_intrusion ~ age_group * item_type + 
+          (1 | subject) + (1 | cue),  
+        family = binomial, 
+        data = e1_chng_only_df)
+
+# Wald's test
+Anova(L1_Intru_glmer_e1)
+
+# Pairwise comparisons 
+(L1_Intru_glmer_e1_emmeans <- 
+    emmeans(L1_Intru_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ item_type | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L1_Intru_glmer_e1_emmeans_df <- as_tibble(L1_Intru_glmer_e1_emmeans$`emmeans of item_type | age_group`))
+
+# Control Items
+(L1_Intru_control_e1_df <-
+  e1_no_rep_df %>%
+  group_by(item_type, age_group) %>%
+  summarise(l1_intrusion = mean(l1_intrusion)) %>% 
+  do(data.frame(rbind(smean.cl.boot(.$l1_intrusion, conf.int=.95, B=10000)))) %>%
+  mutate(Experiment = "Experiment 2") %>% 
+  mutate_if(is.numeric, round, 2))
+```
+
+```{r Create data frames to visualize intrusions from list 1 (experiment 1), echo = FALSE}
+# Create second ItemType variable
+L1_Intru_glmer_e1_emmeans_df$item_type_2 <- 
+  ifelse(L1_Intru_glmer_e1_emmeans_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(L1_Intru_glmer_e1_emmeans_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(L1_Intru_glmer_e1_emmeans_df$item_type == "AB_AD_Test_FB", "A-B, A-D\nTested FB", "")))
+
+# Re-order factor levels
+L1_Intru_glmer_e1_emmeans_df$item_type_2 %<>% factor(levels = c("A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nTested FB"))
+
+L1_Intru_glmer_e1_emmeans_df$age_group %<>% factor(levels = c("Younger", "Older"))
+```
+
+```{r Figure 2: panel B intrusions from list 1 (experiment 1), fig.height=4, fig.width=4}
+# Legend text
+Fig2b_age_text <- 
+  data.frame(
+    age_group = c("Younger", "Older"),
+    x_pos = c(.60, .90),
+    y_pos = c(.32, .10))
+
+# Plot
+Fig2b_p <-
+  L1_Intru_glmer_e1_emmeans_df %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .3), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group), position = position_dodge(width = .3), size = 3.5, shape = 21) +
+  geom_text(data = Fig2b_age_text, aes(x = x_pos, y = y_pos, label = age_group), 
+            hjust = 0, size = 4.5, color = c(younger_all_color, older_all_color)) +
+  scale_fill_manual(name = "Age Group", values = c(younger_all_color, older_all_color)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Intrusions from List 1", x = "Item Type") +
+  theme(legend.position = "none",
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .4, color = "black"), 
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 13, hjust = .5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig2b_p
+```
+
+```{r Model list 1 recall (experiment 1)}
+# Model specification
+Change_Recollection_glmer_e1 <- 
+  glmer(change_recollected ~ age_group * item_type + 
+          (1 | subject) + (1 | cue), 
+        family = binomial,
+        control = more_control,
+        data = e1_chng_only_df)
+
+# Wald's test
+Anova(Change_Recollection_glmer_e1)
+
+# Pairwise comparisons 
+(Change_Recollection_glmer_e1_emmeans <- 
+    emmeans(Change_Recollection_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(Change_Recollection_glmer_e1_emmeans_df <- as_tibble(Change_Recollection_glmer_e1_emmeans$`emmeans of age_group | item_type`))
+```
+
+```{r Create data frames to visualize list 1 recall (experiment 1), echo = FALSE}
+# Create second ItemType variable
+Change_Recollection_glmer_e1_emmeans_df$item_type_2 <- 
+  ifelse(Change_Recollection_glmer_e1_emmeans_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(Change_Recollection_glmer_e1_emmeans_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(Change_Recollection_glmer_e1_emmeans_df$item_type == "AB_AD_Test_FB", "A-B, A-D\nTested FB", "")))
+
+# Re-order factor levels
+Change_Recollection_glmer_e1_emmeans_df$item_type_2 %<>% 
+  factor(levels = c("A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nTested FB"))
+
+Change_Recollection_glmer_e1_emmeans_df$age_group %<>% factor(levels = c("Younger", "Older"))
+```
+
+```{r Figure 2: panel C list 1 recall (experiment 1), fig.height=4, fig.width=4}
+# Legend text
+Fig2c_age_text <- 
+  data.frame(
+    age_group = c("Younger", "Older"),
+    x_pos = c(.60, .90),
+    y_pos = c(.35, .10))
+
+# Plot
+Fig2c_p <-
+  Change_Recollection_glmer_e1_emmeans_df %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .3), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group), position = position_dodge(width = .3), size = 3.5, shape = 21) +
+  geom_text(data = Fig2c_age_text, aes(x = x_pos, y = y_pos, label = age_group), 
+            hjust = 0, size = 4.5, color = c(younger_all_color, older_all_color)) +
+  scale_fill_manual(name = "Age Group", values = c(younger_all_color, older_all_color)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Change Classification + List 1 Recall", x = "Item Type") +
+  theme(legend.position = "none",
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .4, color = "black"), 
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 13, hjust = .5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig2c_p
+```
+
+```{r Figure 2: Combined Cued recall estimated probabilities only (experiment 1), fig.height=4, fig.width=13.5}
+Fig2_p <- (Fig2a_p | Fig2b_p | Fig2c_p) + 
+  plot_annotation(tag_levels = 'A')
+Fig2_p
+
+ggsave("../Figures/Fig2.eps", plot = Fig2_p, width = 13.5, height = 4, units = "in", dpi = 320)
+```
+
+```{r Summarize change classification probabilities (experiment 1)}
+# change classification probabilities
+(change_class_summary_e1_df <-
+  e1_chng_only_df %>%
+  group_by(subject, age_group, item_type) %>%
+  summarise(Change_Recollected = mean(change_recollected),
+            Change_Remembered = mean(change_remembered),
+            Change_Not_Remembered = mean(change_not_remembered)) %>%
+  pivot_longer(c(4:6), names_to = "classification", values_to = "prop") %>% 
+  ungroup() %>% 
+  group_by(age_group, classification, item_type) %>%
+  do(data.frame(rbind(smean.cl.boot(.$prop, conf.int=.95, B=10000)))) %>%
+  arrange(desc(age_group))) %>% 
+  mutate(Experiment = "Experiment 1")
+```
+
+```{r Model list 2 recall conditioned on change recollection (experiment 1)}
+# Model specification
+L2_Recall_Cond_Rec_glmer_e1 <- 
+  glmer(l2_test_acc ~ age_group * item_type +
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        control = more_control, 
+        data = e1_chng_rec_df)
+
+# Wald's test
+Anova(L2_Recall_Cond_Rec_glmer_e1)
+
+# Pairwise comparisons 
+(L2_Recall_Cond_Rec_glmer_e1_emmeans <- 
+    emmeans(L2_Recall_Cond_Rec_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_Cond_Rec_glmer_e1_emmeans_df <- 
+    as_tibble(L2_Recall_Cond_Rec_glmer_e1_emmeans$`emmeans of age_group | item_type`) %>% 
+    mutate(change_class = "Change Recollected", experiment = "Experiment 1") %>% 
+    select(-c(SE, df)))
+```
+
+```{r Model list 2 recall conditioned on change remembered (experiment 1)}
+# Model specification
+L2_Recall_Cond_Rem_glmer_e1 <- 
+  glmer(l2_test_acc ~ age_group * item_type +
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        control = more_control, 
+        data = e1_chng_rem_df)
+
+# Wald's test
+Anova(L2_Recall_Cond_Rem_glmer_e1)
+
+# Pairwise comparisons 
+(L2_Recall_Cond_Rem_glmer_e1_emmeans <- 
+    emmeans(L2_Recall_Cond_Rem_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_Cond_Rem_glmer_e1_emmeans_df <- 
+    as_tibble(L2_Recall_Cond_Rem_glmer_e1_emmeans$`emmeans of age_group | item_type`) %>% 
+    mutate(change_class = "Change Remembered", experiment = "Experiment 1") %>% 
+    select(-c(SE, df)))
+```
+
+```{r Model list 2 recall conditioned on change not remembered (experiment 1)}
+# Model specification
+L2_Recall_Cond_Not_Rem_glmer_e1 <- 
+  glmer(l2_test_acc ~ age_group * item_type +
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        control = more_control, 
+        data = e1_no_chng_df)
+
+# Wald's test
+Anova(L2_Recall_Cond_Not_Rem_glmer_e1)
+
+# Pairwise comparisons 
+(L2_Recall_Cond_Not_Rem_glmer_e1_emmeans <- 
+    emmeans(L2_Recall_Cond_Not_Rem_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_Cond_Not_Rem_glmer_e1_emmeans_df <- 
+    as_tibble(L2_Recall_Cond_Not_Rem_glmer_e1_emmeans$`emmeans of age_group | item_type`) %>% 
+    mutate(change_class = "Change Not Remembered", experiment = "Experiment 1") %>% 
+    select(-c(SE, df)))
+```
+
+```{r Combine conditional list 2 recall data frames (experiment 1), echo = FALSE, message = FALSE}
+# Combine data frames
+L2_Recall_Cond_glmer_emmeans_all_e1_df <- 
+    bind_rows(L2_Recall_Cond_Rec_glmer_e1_emmeans_df, L2_Recall_Cond_Rem_glmer_e1_emmeans_df, L2_Recall_Cond_Not_Rem_glmer_e1_emmeans_df) %>%
+    select(experiment, everything()) 
+
+# Create second ItemType variable
+L2_Recall_Cond_glmer_emmeans_all_e1_df$item_type_2 <- 
+  ifelse(L2_Recall_Cond_glmer_emmeans_all_e1_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(L2_Recall_Cond_glmer_emmeans_all_e1_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(L2_Recall_Cond_glmer_emmeans_all_e1_df$item_type == "AB_AD_Test_FB", "A-B, A-D\nTested FB", "")))
+```
+
+```{r Create data frames with cell counts for conditional points sizes (experiment 1), echo = FALSE, message = FALSE}
+# Compute counts and proportions
+(Point_Size_cnd_e1_df <- 
+  e1_chng_only_df %>%
+  group_by(age_group, item_type, change_class) %>% 
+  summarise(n = length(l2_test_acc)) %>%
+  mutate(obs = n / sum(n)))
+
+L2_Recall_cnd_e1_df_p <- 
+  left_join(L2_Recall_Cond_glmer_emmeans_all_e1_df, Point_Size_cnd_e1_df) %>%
+  select(item_type, change_class, n, obs, everything())
+
+# Re-order factor levels
+L2_Recall_cnd_e1_df_p$item_type_2 %<>% factor(levels = c("A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nTested FB"))
+L2_Recall_cnd_e1_df_p$age_group %<>% factor(levels = c("Younger", "Older"))
+L2_Recall_cnd_e1_df_p$change_class %<>% factor(levels = c("Change Recollected", "Change Remembered", "Change Not Remembered"))
+```
+```{r Figure 3: Correct Recall List 2 conditioned on change recollected estimated probabilities only (experiment 1), fig.height=4, fig.width=12}
+# Legend text
+age_text <-
+  data.frame(
+    age_group = c("Younger", "Older", "Younger", "Older", "Younger", "Older"),
+    change_class = c("Change Recollected", "Change Recollected",
+                     "Change Remembered", "Change Remembered",
+                     "Change Not Remembered", "Change Not Remembered"),
+    x_pos = c(.50, .80, .50, .80, .50, .80),
+    y_pos = c(1.03, .52, .50, .05, .40, .07))
+
+#Order factor levels
+age_text$age_group <-
+  factor(age_text$age_group,
+         levels = c("Younger", "Older"))
+
+age_text$change_class <-
+  factor(age_text$change_class,
+         levels = c("Change Recollected", "Change Remembered", "Change Not Remembered"))
+
+# Plot
+(Fig3_p <-
+  L2_Recall_cnd_e1_df_p %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  facet_grid(. ~ change_class) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group, size = obs), position = position_dodge(width = .5), shape = 21, stroke = .3) +
+  geom_text(data = age_text, aes(x = x_pos, y = y_pos, label = age_group), hjust = 0, size = 5, 
+            color = c(younger_all_color, older_all_color, younger_all_color, older_all_color, younger_all_color, older_all_color)) +
+  scale_fill_manual(values = c(younger_all_color, older_all_color)) +
+  scale_size_area(max_size = 5) +
+  guides(size = FALSE, fill = guide_legend(override.aes = list(size = 4)))+
+  scale_y_continuous(name = "List 2 Recall", limits = c(0, 1.1), breaks = seq(0, 1, .1)) +
+  labs(x = "Correction Classification") +
+  theme(legend.position = "none",
+        legend.key=element_rect(fill="transparent",size=0),
+        legend.key.height=unit(.5,"cm"),
+        legend.key.width=unit(.5,"cm"),
+        legend.title=element_text(size = 12),
+        legend.text=element_text(size = 10),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"),
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0)),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.10, .10, .10, .10), "in"),
+        plot.title = element_text(size = 13, color = "black", hjust = .5), 
+        panel.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black")))
+
+ggsave("../Figures/Fig3.eps", plot = Fig3_p, width = 12, height = 4, units = "in", dpi = 320)
+```
+
+# Experiment 2
+```{r Model interpolated recall (experiment 2)}
+# Model specification
+Inter_Recall_glmer_e2 <- 
+  glmer(l1_inter_test_acc ~ age_group + 
+          (1 | subject) + (1 | cue), 
+        family = binomial,
+        control = more_control,
+        data = e2_tested_only_df)
+
+# Wald's test
+Anova(Inter_Recall_glmer_e2)
+
+# Pairwise comparisons 
+(Inter_Recall_glmer_e2_emmeans <- 
+    emmeans(Inter_Recall_glmer_e2, pairwise ~ age_group, type = "response"))
+
+# Extract estimated probabilities
+(Inter_Recall_glmer_e2_emmeans_df <- as_tibble(Inter_Recall_glmer_e2_emmeans$emmeans))
+
+# Add variables for item type and experiment number
+Inter_Recall_glmer_e2_emmeans_df$item_type <- "AB_AD_Test"
+Inter_Recall_glmer_e2_emmeans_df$Experiment <- "Experiment 2"
+
+```
+
+```{r Model list 2 recall (experiment 2)}
+# Model specification
+L2_Recall_glmer_e2 <- 
+  glmer(l2_test_acc ~ age_group * item_type + 
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        data = e2_no_rep_df)
+
+# Wald's test
+Anova(L2_Recall_glmer_e2)
+
+# Pairwise comparisons 
+(L2_Recall_glmer_e2_emmeans <- 
+    emmeans(L2_Recall_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type,
+                 pairwise ~ item_type | age_group), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_glmer_e2_emmeans_df <- as_tibble(L2_Recall_glmer_e2_emmeans$`emmeans of age_group | item_type`))
+```
+
+```{r Create data frames to visualize list 2 recall (experiment 2), echo = FALSE}
+# Create second ItemType variable
+L2_Recall_glmer_e2_emmeans_df$item_type_2 <- 
+  ifelse(L2_Recall_glmer_e2_emmeans_df$item_type == "AB_CD", "---, C-D\nControl",
+  ifelse(L2_Recall_glmer_e2_emmeans_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(L2_Recall_glmer_e2_emmeans_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(L2_Recall_glmer_e2_emmeans_df$item_type == "AB_AD_Restudy", "A-B, A-D\nRestudied", ""))))
+
+# Re-order factor levels
+L2_Recall_glmer_e2_emmeans_df$item_type_2 %<>% 
+  factor(levels = c("---, C-D\nControl", "A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nRestudied"))
+
+L2_Recall_glmer_e2_emmeans_df$age_group %<>% factor(levels = c("Younger", "Older"))
+```
+
+```{r Figure 4: panel A list 2 recall (experiment 2), fig.height=4, fig.width=4}
+# Legend text
+Fig4a_age_text <- 
+  data.frame(
+    age_group = c("Younger", "Older"),
+    x_pos = c(.54, .80),
+    y_pos = c(.46, .10))
+
+# Plot
+Fig4a_p <-
+  L2_Recall_glmer_e2_emmeans_df %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .3), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group), position = position_dodge(width = .3), size = 3.5, shape = 21) +
+  geom_text(data = Fig4a_age_text, aes(x = x_pos, y = y_pos, label = age_group), 
+            hjust = 0, size = 4.5, color = c(younger_all_color, older_all_color)) +
+  scale_fill_manual(name = "Age Group", values = c(younger_all_color, older_all_color)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "List 2 Recall", x = "Item Type") +
+  theme(legend.position = "none",
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .4, color = "black"), 
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 13, hjust = .5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig4a_p
+```
+
+```{r Model intrusions from list 1 (experiment 2)}
+# Model specification
+L1_Intru_glmer_e2 <- 
+  glmer(l1_intrusion ~ age_group * item_type + 
+          (1 | subject) + (1 | cue),  
+        family = binomial, 
+        data = e2_chng_only_df)
+
+# Wald's test
+Anova(L1_Intru_glmer_e2)
+
+# Pairwise comparisons 
+(L1_Intru_glmer_e2_emmeans <- 
+    emmeans(L1_Intru_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+
+# Extract estimated probabilities
+(L1_Intru_glmer_e2_emmeans_df <- 
+    as_tibble(L1_Intru_glmer_e2_emmeans$`emmeans of age_group | item_type`))
+
+# Control Items
+(L1_Intru_control_e2_df <-
+  e2_chng_only_df %>%
+  group_by(item_type, age_group) %>%
+  summarise(l1_intrusion = mean(l1_intrusion)) %>% 
+  do(data.frame(rbind(smean.cl.boot(.$l1_intrusion, conf.int=.95, B=10000)))) %>%
+  mutate(Experiment = "Experiment 2") %>% 
+  mutate_if(is.numeric, round, 2))
+```
+
+```{r Create data frames to visualize intrusions from list 1 (experiment 2), echo = FALSE}
+# Create second ItemType variable
+L1_Intru_glmer_e2_emmeans_df$item_type_2 <- 
+  ifelse(L1_Intru_glmer_e2_emmeans_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(L1_Intru_glmer_e2_emmeans_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(L1_Intru_glmer_e2_emmeans_df$item_type == "AB_AD_Restudy", "A-B, A-D\nRestudied", "")))
+
+# Re-order factor levels
+L1_Intru_glmer_e2_emmeans_df$item_type_2 %<>%
+  factor(levels = c("A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nRestudied"))
+
+L1_Intru_glmer_e2_emmeans_df$age_group %<>% factor(levels = c("Younger", "Older"))
+```
+
+```{r Figure 4: panel B intrusions from list 1 (experiment 2), fig.height=4, fig.width=4}
+# Legend text
+Fig4b_age_text <- 
+  data.frame(
+    age_group = c("Younger", "Older"),
+    x_pos = c(.60, .90),
+    y_pos = c(.06, .27))
+
+# Plot
+Fig4b_p <-
+  L1_Intru_glmer_e2_emmeans_df %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .3), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group), position = position_dodge(width = .3), size = 3.5, shape = 21) +
+  geom_text(data = Fig4b_age_text, aes(x = x_pos, y = y_pos, label = age_group), 
+            hjust = 0, size = 4.5, color = c(younger_all_color, older_all_color)) +
+  scale_fill_manual(name = "Age Group", values = c(younger_all_color, older_all_color)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Intrusions from List 1", x = "Item Type") +
+  theme(legend.position = "none",
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .4, color = "black"), 
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 13, hjust = .5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig4b_p
+```
+
+```{r Model list 1 recall (experiment 2)}
+# Model specification
+Change_Recollection_glmer_e2 <- 
+  glmer(change_recollected ~ age_group * item_type + 
+          (1 | subject) + (1 | cue), 
+        family = binomial,
+        control = more_control,
+        data = e2_chng_only_df)
+
+# Wald's test
+Anova(Change_Recollection_glmer_e2)
+
+# Pairwise comparisons 
+(Change_Recollection_glmer_e2_emmeans <- 
+    emmeans(Change_Recollection_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(Change_Recollection_glmer_e2_emmeans_df <- 
+    as_tibble(Change_Recollection_glmer_e2_emmeans$`emmeans of age_group | item_type`))
+```
+
+```{r Create data frames to visualize list 1 recall (experiment 2), echo = FALSE}
+# Create second ItemType variable
+Change_Recollection_glmer_e2_emmeans_df$item_type_2 <- 
+  ifelse(Change_Recollection_glmer_e2_emmeans_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(Change_Recollection_glmer_e2_emmeans_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(Change_Recollection_glmer_e2_emmeans_df$item_type == "AB_AD_Restudy", "A-B, A-D\nRestudied", "")))
+
+# Re-order factor levels
+Change_Recollection_glmer_e2_emmeans_df$item_type_2 %<>% 
+  factor(levels = c("A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nRestudied"))
+
+Change_Recollection_glmer_e2_emmeans_df$age_group %<>% factor(levels = c("Younger", "Older"))
+```
+
+```{r Figure 4: panel C list 1 recall (experiment 2), fig.height=4, fig.width=4}
+# Legend text
+Fig4c_age_text <- 
+  data.frame(
+    age_group = c("Younger", "Older"),
+    x_pos = c(.60, .90),
+    y_pos = c(.37, .07))
+
+# Plot
+Fig4c_p <-
+  Change_Recollection_glmer_e2_emmeans_df %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .3), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group), position = position_dodge(width = .3), size = 3.5, shape = 21) +
+  geom_text(data = Fig4c_age_text, aes(x = x_pos, y = y_pos, label = age_group), 
+            hjust = 0, size = 4.5, color = c(younger_all_color, older_all_color)) +
+  scale_fill_manual(name = "Age Group", values = c(younger_all_color, older_all_color)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Change Classification + List 1 Recall", x = "Item Type") +
+  theme(legend.position = "none",
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .4, color = "black"), 
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.title = element_text(size = 13, hjust = .5),
+        plot.margin = unit(c(.15, .15, .15, .15), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-0.00001, "cm"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig4c_p
+```
+
+```{r Figure 4: Combined Cued recall estimated probabilities only (experiment 2), fig.height=4, fig.width=13.5}
+Fig4_p <- (Fig4a_p | Fig4b_p | Fig4c_p) + 
+  plot_annotation(tag_levels = 'A')
+Fig4_p
+
+ggsave("../Figures/Fig4.eps", plot = Fig4_p, width = 13.5, height = 4, units = "in", dpi = 320)
+```
+
+```{r Summarize change classification probabilities (experiment 2)}
+# change classification probabilities
+(change_class_summary_e2_df <-
+  e2_chng_only_df %>%
+  group_by(subject, age_group, item_type) %>%
+  summarise(Change_Recollected = mean(change_recollected),
+            Change_Remembered = mean(change_remembered),
+            Change_Not_Remembered = mean(change_not_remembered)) %>%
+  pivot_longer(c(4:6), names_to = "classification", values_to = "prop") %>% 
+  ungroup() %>% 
+  group_by(age_group, classification, item_type) %>%
+  do(data.frame(rbind(smean.cl.boot(.$prop, conf.int=.95, B=10000)))) %>%
+  arrange(desc(age_group))) %>% 
+  mutate(Experiment = "Experiment 2")
+```
+
+```{r Model list 2 recall conditioned on change recollection (experiment 2)}
+# Model specification
+L2_Recall_Cond_Rec_glmer_e2 <- 
+  glmer(l2_test_acc ~ age_group * item_type +
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        control = more_control, 
+        data = e2_chng_rec_df)
+
+# Wald's test
+Anova(L2_Recall_Cond_Rec_glmer_e2)
+
+# Pairwise comparisons 
+(L2_Recall_Cond_Rec_glmer_e2_emmeans <- 
+    emmeans(L2_Recall_Cond_Rec_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_Cond_Rec_glmer_e2_emmeans_df <- 
+    as_tibble(L2_Recall_Cond_Rec_glmer_e2_emmeans$`emmeans of age_group | item_type`) %>% 
+    mutate(change_class = "Change Recollected", experiment = "Experiment 2") %>% 
+    select(-c(SE, df)))
+```
+
+
+```{r Model list 2 recall conditioned on change remembered (experiment 2)}
+# Model specification
+L2_Recall_Cond_Rem_glmer_e2 <- 
+  glmer(l2_test_acc ~ age_group * item_type +
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        control = more_control, 
+        data = e2_chng_rem_df)
+
+# Wald's test
+Anova(L2_Recall_Cond_Rem_glmer_e2)
+
+# Pairwise comparisons 
+(L2_Recall_Cond_Rem_glmer_e2_emmeans <- 
+    emmeans(L2_Recall_Cond_Rem_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_Cond_Rem_glmer_e2_emmeans_df <- 
+    as_tibble(L2_Recall_Cond_Rem_glmer_e2_emmeans$`emmeans of age_group | item_type`) %>% 
+    mutate(change_class = "Change Remembered", experiment = "Experiment 2") %>% 
+    select(-c(SE, df)))
+```
+
+
+```{r Model list 2 recall conditioned on change not remembered (experiment 2)}
+# Model specification
+L2_Recall_Cond_Not_Rem_glmer_e2 <- 
+  glmer(l2_test_acc ~ age_group * item_type +
+          (1 | subject) + (1 | cue), 
+        family = binomial, 
+        control = more_control, 
+        data = e2_no_chng_df)
+
+# Wald's test
+Anova(L2_Recall_Cond_Not_Rem_glmer_e2)
+
+# Pairwise comparisons 
+(L2_Recall_Cond_Not_Rem_glmer_e2_emmeans <- 
+    emmeans(L2_Recall_Cond_Not_Rem_glmer_e2, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type), type = "response"))
+
+# Extract estimated probabilities
+(L2_Recall_Cond_Not_Rem_glmer_e2_emmeans_df <- 
+    as_tibble(L2_Recall_Cond_Not_Rem_glmer_e2_emmeans$`emmeans of age_group | item_type`) %>% 
+    mutate(change_class = "Change Not Remembered", experiment = "Experiment 2") %>% 
+    select(-c(SE, df)))
+```
+
+```{r Combine conditional list 2 recall data frames (experiment 2), echo = FALSE, message = FALSE}
+# Combine data frames
+L2_Recall_Cond_glmer_emmeans_all_e2_df <- 
+    bind_rows(L2_Recall_Cond_Rec_glmer_e2_emmeans_df, L2_Recall_Cond_Rem_glmer_e2_emmeans_df, L2_Recall_Cond_Not_Rem_glmer_e2_emmeans_df) %>% 
+    select(experiment, everything())
+
+# Create second ItemType variable
+L2_Recall_Cond_glmer_emmeans_all_e2_df$item_type_2 <- 
+  ifelse(L2_Recall_Cond_glmer_emmeans_all_e2_df$item_type == "AB_AD", "A-B, A-D\nNot Tested", 
+  ifelse(L2_Recall_Cond_glmer_emmeans_all_e2_df$item_type == "AB_AD_Test", "A-B, A-D\nTested",
+  ifelse(L2_Recall_Cond_glmer_emmeans_all_e2_df$item_type == "AB_AD_Restudy", "A-B, A-D\nRestudied", "")))
+```
+
+```{r Create data frames with cell counts for conditional points sizes (experiment 2), echo = FALSE, message = FALSE}
+# Compute counts and proportions
+(Point_Size_cnd_e2_df <- 
+  e2_chng_only_df %>%
+  group_by(age_group, item_type, change_class) %>% 
+  summarise(n = length(l2_test_acc)) %>%
+  mutate(obs = n / sum(n)))
+
+L2_Recall_cnd_e2_df_p <- 
+  left_join(L2_Recall_Cond_glmer_emmeans_all_e2_df, Point_Size_cnd_e2_df) %>%
+  select(item_type, change_class, n, obs, everything())
+
+# Re-order factor levels
+L2_Recall_cnd_e2_df_p$item_type_2 %<>% factor(levels = c("A-B, A-D\nNot Tested", "A-B, A-D\nTested", "A-B, A-D\nRestudied"))
+L2_Recall_cnd_e2_df_p$age_group %<>% factor(levels = c("Younger", "Older"))
+L2_Recall_cnd_e2_df_p$change_class %<>% factor(levels = c("Change Recollected", "Change Remembered", "Change Not Remembered"))
+```
+
+```{r Figure 5: Correct Recall List 2 conditioned on change recollected estimated probabilities only (experiment 2), fig.height=4, fig.width=12}
+# Legend text
+age_text <-
+  data.frame(
+    age_group = c("Younger", "Older", "Younger", "Older", "Younger", "Older"),
+    change_class = c("Change Recollected", "Change Recollected",
+                     "Change Remembered", "Change Remembered",
+                     "Change Not Remembered", "Change Not Remembered"),
+    x_pos = c(.50, .80, .50, .80, .50, .80),
+    y_pos = c(.96, .38, .50, .10, .36, .05))
+
+#Order factor levels
+age_text$age_group <-
+  factor(age_text$age_group,
+         levels = c("Younger", "Older"))
+
+age_text$change_class <-
+  factor(age_text$change_class,
+         levels = c("Change Recollected", "Change Remembered", "Change Not Remembered"))
+
+# Plot
+(Fig5_p <-
+  L2_Recall_cnd_e2_df_p %>% 
+  ggplot(aes(x = item_type_2, y = prob, group = age_group)) +
+  facet_grid(. ~ change_class) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = age_group, size = obs), position = position_dodge(width = .5), shape = 21, stroke = .3) +
+  geom_text(data = age_text, aes(x = x_pos, y = y_pos, label = age_group), hjust = 0, size = 5, 
+            color = c(younger_all_color, older_all_color, younger_all_color, older_all_color, younger_all_color, older_all_color)) +
+  scale_fill_manual(values = c(younger_all_color, older_all_color)) +
+  scale_size_area(max_size = 5) +
+  guides(size = FALSE, fill = guide_legend(override.aes = list(size = 4)))+
+  scale_y_continuous(name = "List 2 Recall", limits = c(0, 1.1), breaks = seq(0, 1, .1)) +
+  labs(x = "Correction Classification") +
+  theme(legend.position = "none",
+        legend.key=element_rect(fill="transparent",size=0),
+        legend.key.height=unit(.5,"cm"),
+        legend.key.width=unit(.5,"cm"),
+        legend.title=element_text(size = 12),
+        legend.text=element_text(size = 10),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3, color = "black"),
+        axis.text.x=element_text(size = 10, color = "black"),
+        axis.text.y=element_text(size = 10, color = "black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0)),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.10, .10, .10, .10), "in"),
+        plot.title = element_text(size = 13, color = "black", hjust = .5), 
+        panel.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black")))
+
+ggsave("../Figures/Fig5.eps", plot = Fig5_p, width = 12, height = 4, units = "in", dpi = 320)
+```
+

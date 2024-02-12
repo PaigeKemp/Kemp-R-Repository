@@ -1,0 +1,165 @@
+---
+title: "Sensitivity Analysis for Testing Enhances Episodic Memory Updating in Younger and Older Adults"
+author: "Paige Kemp & Chris Wahlheim"
+Date: "`r Sys.Date()`"
+output:
+  html_document:
+   toc: true
+   toc_float: true
+  pdf_document: default
+---
+
+```{r Clean environment}
+rm(list=ls())
+```
+
+```{r Install and load packages}
+# Install pacman
+if(!require("pacman")) install.packages("pacman")
+
+# Load packages
+pacman::p_load("janitor", "tidyverse", "magrittr", "lme4", "car", "emmeans", "patchwork", "Hmisc", "effectsize", "simr")
+```
+
+```{r Turn Off Scientific Notation}
+options(scipen = 999)
+```
+
+```{r Global variables}
+# glmer optimizer
+more_control <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e4))
+```
+
+```{r Read data frames, message = FALSE}
+# Experiment 1 data frames
+Exp1_Inter_Data_df <- read_csv('../Data/Exp1_Interpolated_data.csv')
+Exp1_Test_Data_df <- read_csv('../Data/Exp1_Test_data.csv')
+
+# Experiment 2 data frames
+Exp2_Inter_Data_df <- read_csv('../Data/Exp2_Interpolated_data.csv')
+Exp2_Test_Data_df <- read_csv('../Data/Exp2_Test_data.csv')
+```
+
+```{r Sample sizes, echo = FALSE, message = FALSE}
+# Interpolated test phase data frame
+Exp1_Inter_Data_n <- Exp1_Inter_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_Inter_Data_n <- Exp2_Inter_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+
+# Test phase data frame
+Exp1_Test_Data_n <- Exp1_Test_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 1
+Exp2_Test_Data_n <- Exp2_Test_Data_df %>% mutate(N = n_distinct(Subject)) %>% summarise(N = mean(N)) # Experiment 2
+```
+
+```{r Join interpolated and test phase data frames}
+# Experiment 1
+e1_df <- Exp1_Inter_Data_df %>%
+  select(-Target) %>% 
+  full_join(Exp1_Test_Data_df, by = c("Subject", "AgeGroup", "Cue", "ItemType"))
+
+# Experiment 2
+e2_df <- Exp2_Inter_Data_df %>%
+  select(-Target) %>% 
+  full_join(Exp2_Test_Data_df, by = c("Subject", "AgeGroup", "Cue", "ItemType"))
+```
+
+```{r Clean variable names}
+# Experiment 1
+e1_df %<>% clean_names()  
+
+# Experiment 1
+e2_df %<>% clean_names()  
+```
+
+```{r Set factors}
+# Experiment 1
+e1_df %<>% mutate_at(c("age_group", "subject", "cue", "item_type"), factor)
+
+# Experiment 2
+e2_df %<>% mutate_at(c("age_group", "subject", "cue", "item_type"), factor)
+```
+
+```{r Create subsetted data frames}
+# Experiment 1
+e1_no_rep_df <- e1_df %>% filter(!item_type == "AB_AB") %>% droplevels ## without repeated items
+e1_inter_only_df <- e1_df %>% filter(item_type %in% c("AB_AD_Test", "AB_AD_Test_FB")) %>% droplevels ## interpolated items
+e1_chng_only_df <- e1_df %>% filter(item_type %in% c("AB_AD", "AB_AD_Test", "AB_AD_Test_FB")) %>% droplevels ## changed items
+e1_chng_rec_df <- e1_chng_only_df %>% filter(change_class == "Change Recollected") %>% droplevels ## change recollected
+e1_chng_rem_df <- e1_chng_only_df %>% filter(change_class == "Change Remembered") %>% droplevels ## change remembered
+e1_no_chng_df <- e1_chng_only_df %>% filter(change_class == "Change Not Remembered") %>% droplevels ## change not remembered
+
+# Experiment 2
+e2_no_rep_df <- e2_df %>% filter(!item_type == "AB_AB") %>% droplevels ## without repeated items
+e2_inter_only_df <- e2_df %>% filter(item_type %in% c("AB_AD_Test", "AB_AD_Restudy")) %>% droplevels ## interpolated items
+e2_chng_only_df <- e2_df %>%  filter(item_type %in% c("AB_AD", "AB_AD_Test", "AB_AD_Restudy")) %>% droplevels ## changed items
+e2_chng_rec_df <- e2_chng_only_df %>% filter(change_class == "Change Recollected") %>% droplevels ## change recollected
+e2_chng_rem_df <- e2_chng_only_df %>% filter(change_class == "Change Remembered") %>% droplevels ## change remembered
+e2_no_chng_df <- e2_chng_only_df %>%  filter(change_class == "Change Not Remembered") %>% droplevels ## change not remembered
+```
+
+```{r Set Reference level}
+# Set reference levels for predictor
+e1_no_rep_df$item_type <- relevel(e1_no_rep_df$item_type, ref = "AB_AD_Test")
+e1_chng_only_df$item_type <- relevel(e1_chng_only_df$item_type, ref = "AB_AD_Test")
+
+e2_no_rep_df$item_type <- relevel(e2_no_rep_df$item_type, ref = "AB_AD_Test")
+e2_chng_only_df$item_type <- relevel(e2_chng_only_df$item_type, ref = "AB_AD_Test")
+```
+
+## Find smallest effect of interest ##
+```{r Model list 1 recall (experiment 1)}
+# Model specification
+Change_Recollection_glmer_e1 <- 
+  glmer(change_recollected ~ age_group * item_type + 
+          (1 | subject) + (1 | cue), 
+        family = binomial,
+        control = more_control,
+        data = e1_chng_only_df)
+
+# Wald's test
+Anova(Change_Recollection_glmer_e1)
+
+# Pairwise comparisons 
+(Change_Recollection_glmer_e1_emmeans <- 
+    emmeans(Change_Recollection_glmer_e1, 
+            list(pairwise ~ age_group,
+                 pairwise ~ item_type,
+                 pairwise ~ age_group | item_type,
+                 pairwise ~ item_type | age_group), type = "response"))
+
+# Extract estimated probabilities
+(Change_Recollection_glmer_e1_emmeans_df <- as_tibble(Change_Recollection_glmer_e1_emmeans$`emmeans of age_group | item_type`))
+```
+
+
+```{r Run power simulation and power curve (experiment 1)}
+# Power Simulations for Difference
+# Summary of fitted glmer
+summary(Change_Recollection_glmer_e1)$coef
+
+# Test of significance and effect size 
+doTest(Change_Recollection_glmer_e1, fixed("age_groupYounger:item_typeAB_AD_Test_FB", "z")) #0.03
+
+# Convert logs odds to odds ratio
+exp(0.03)
+
+# interpret odds ratio
+interpret_oddsratio(1.03)
+
+# Simulation
+powerSim(Change_Recollection_glmer_e1, fixed("age_groupYounger:item_typeAB_AD_Test_FB", "z"), nsim = 1000)
+
+
+# Increase number of subjects for power curve
+Change_Recollection_glmer_e1_2 <- extend(Change_Recollection_glmer_e1, along="subject", n=360)
+
+# Power Curve
+Power_Curve <- powerCurve(Change_Recollection_glmer_e1_2, fixed("age_groupYounger:item_typeAB_AD_Test_FB", "z"), nsim = 1000, along = "subject")
+
+# Plot Curve
+plot(Power_Curve)
+
+print(Power_Curve)
+```
+
+
+
