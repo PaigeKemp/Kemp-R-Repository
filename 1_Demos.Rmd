@@ -1,0 +1,302 @@
+---
+title: "Demographics & Cognitive Performance for Testing Enhances Episodic Memory Updating in Younger and Older Adults Project"
+author: "Paige Kemp & Chris Wahlheim"
+Date: "`r Sys.Date()`"
+output:
+  html_document:
+   toc: true
+   toc_float: true
+  pdf_document: default
+---
+
+# Clear Environment and Load Packages
+```{r}
+rm(list=ls())
+```
+
+# Install and load packages
+```{r Install and load packages}
+# Install pacman
+if(!require("pacman")) install.packages("pacman")
+
+# Load packages
+pacman::p_load("tidyverse", "magrittr", "lme4", "car", "emmeans", "patchwork", "Hmisc", "psych")
+```
+
+# Read Data Files
+```{r Read Data Files}
+# Experiment 1 #
+Exp1_Cog_Performance <- read.csv("../Data/Exp1_Cog_Performance.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+Exp1_Shipley_Vocab <- read.csv("../Data/Exp1_Shipley_Vocab.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+Exp1_Demo <- read.csv("../Data/Exp1_Demographics.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+
+# Experiment 2
+Exp2_Cog_Performance <- read.csv("../Data/Exp2_Cog_Performance.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+Exp2_Shipley_Vocab <- read.csv("../Data/Exp2_Shipley_Vocab.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+Exp2_Demo <- read.csv("../Data/Exp2_Demographics.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+```
+
+# Remove subjects
+```{r}
+# Experiment 1
+Exp1_Cog_Performance <- Exp1_Cog_Performance %>% filter(!Subject %in% c("111", "112", "252"))
+Exp1_Shipley_Vocab <- Exp1_Shipley_Vocab %>% filter(!Subject %in% c("111", "112", "252"))
+Exp1_Demo <- Exp1_Demo %>% filter(!Subject %in% c("111", "112", "252"))
+
+# Experiment 2
+Exp2_Cog_Performance <- Exp2_Cog_Performance %>% filter(!Subject %in% c("101","103","106","107","108","110","155","156","167","171","213","230","239", "254"))
+Exp2_Shipley_Vocab <- Exp2_Shipley_Vocab %>% filter(!Subject %in% c("101","103","106","107","108","110","155","156","167","171","213","230","239", "254"))
+Exp2_Demo <- Exp2_Demo %>% filter(!Subject %in% c("101","103","106","107","108","110","155","156","167","171","213","230","239", "254"))
+```
+
+# Samples sizes
+```{r}
+# Experiment 1 #
+
+# Demographics
+(Exp1_Demo_n <- 
+   Exp1_Demo %>% 
+   group_by(AgeGroup) %>% 
+   mutate(N = n_distinct(Subject)) %>% 
+   summarise(N = mean(N)))
+
+# Cognitive measures
+(Exp1_Cog_Performance_n <- 
+   Exp1_Cog_Performance %>% 
+   group_by(AgeGroup) %>% 
+   mutate(N = n_distinct(Subject)) %>% 
+   summarise(N = mean(N)))
+
+# Shipley vocab
+(Exp1_Shipley_Vocab_n <- 
+   Exp1_Shipley_Vocab %>% 
+   group_by(AgeGroup) %>% 
+   mutate(N = n_distinct(Subject)) %>% 
+   summarise(N = mean(N)))
+
+# Experiment 2 #
+
+# Demographics
+(Exp2_Demo_n <- 
+   Exp2_Demo %>% 
+   group_by(AgeGroup) %>% 
+   mutate(N = n_distinct(Subject)) %>% 
+   summarise(N = mean(N)))
+
+# Cognitive measures
+(Exp2_Cog_Performance_n <- 
+   Exp2_Cog_Performance %>% 
+   group_by(AgeGroup) %>% 
+   mutate(N = n_distinct(Subject)) %>% 
+   summarise(N = mean(N)))
+
+# Shipley vocab
+(Exp2_Shipley_Vocab_n <- 
+   Exp2_Shipley_Vocab %>% 
+   group_by(AgeGroup) %>% 
+   mutate(N = n_distinct(Subject)) %>% 
+   summarise(N = mean(N)))
+```
+
+# Add experiment label to data frames
+```{r}
+# Experiment 1
+Exp1_Demo %<>% mutate(Experiment = "Experiment 1")
+Exp1_Cog_Performance %<>% mutate(Experiment = "Experiment 1") 
+Exp1_Shipley_Vocab %<>% mutate(Experiment = "Experiment 1") 
+
+# Experiment 2
+Exp2_Demo %<>% mutate(Experiment = "Experiment 2")
+Exp2_Cog_Performance %<>% mutate(Experiment = "Experiment 2") 
+Exp2_Shipley_Vocab %<>% mutate(Experiment = "Experiment 2") 
+```
+
+# Combine data frames across experiments
+```{r Combine data frames across experiments}
+# Demographics
+Demos_df <- bind_rows(Exp1_Demo, Exp2_Demo)
+
+# Cognitive measures
+Cog_Performance_df <- bind_rows(Exp1_Cog_Performance, Exp2_Cog_Performance)
+
+# Shipley vocabulary
+Shipley_Vocab_df <- bind_rows(Exp1_Shipley_Vocab, Exp2_Shipley_Vocab)
+```
+
+# Provide Demographic Data Summaries 
+```{r Provide Demographic Data Summaries}
+
+# Extract Numbers For Age Variable
+Demos_df$Age.RESP <- extract_numeric(Demos_df$Age.RESP)
+
+# Summarize Age and Gender 
+(Age_Gender_df <- 
+    Demos_df %>% 
+    group_by(Experiment, AgeGroup) %>%
+    summarise(Subject_n = n(),
+              Female = sum(Gender.Choice1.ValueLabel == "Female"),
+              Male = sum(Gender.Choice1.ValueLabel == "Male"),
+              Gender_Diverse = sum(Gender.Choice1.ValueLabel == "Gender Diverse"),
+              Mean_Age = mean(Age.RESP),
+              SD_Age = sd(Age.RESP),
+              Min_Age = min(Age.RESP),
+              Max_Age = max(Age.RESP)) %>% 
+    mutate_if(is.numeric, round, digits = 2))
+
+# Summarize Race
+(Race_df <- Demos_df %>% 
+  group_by(Ethnicity.Choice1.ValueLabel, AgeGroup, Experiment) %>% 
+  summarise(n = n()) %>% 
+    pivot_wider(names_from =c(Experiment, AgeGroup), values_from = n))
+
+# Summarize Education
+(Edu_df <- 
+    Demos_df %>% 
+    group_by(Experiment, AgeGroup) %>%
+    summarise(Mean_Edu = mean(EduYears.Choice1.ValueLabel, na.rm = T),
+              SD_Edu = sd(EduYears.Choice1.ValueLabel, na.rm = T),
+              Min_Edu = min(EduYears.Choice1.ValueLabel, na.rm = T),
+              Max_Edu = max(EduYears.Choice1.ValueLabel, na.rm = T)) %>% 
+    mutate_if(is.numeric, round, digits = 2))
+```
+
+
+# Summarize measures and demos
+```{r Summarize measures and demos}
+
+# Cognitive measures #
+
+# MMSE_Score
+MMSE_df <- 
+  Cog_Performance_df %>% 
+  group_by(Experiment, AgeGroup) %>% 
+  summarise(Mean = mean(MMSE_Score),
+            SD = sd(MMSE_Score),
+            Min = min(MMSE_Score),
+            Max = max(MMSE_Score)) %>% 
+  mutate(Measure = "MMSE") %>%
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  select(Measure, everything())
+MMSE_df            
+
+# DSST_90
+DSST_90_df <- 
+  Cog_Performance_df %>% 
+  group_by(Experiment, AgeGroup) %>% 
+  summarise(Mean = mean(DSST_90),
+            SD = sd(DSST_90),
+            Min = min(DSST_90),
+            Max = max(DSST_90)) %>% 
+  mutate(Measure = "DSST_90") %>%
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  select(Measure, everything())
+DSST_90_df
+
+# DSST_90
+DSST_9_df <- 
+  Cog_Performance_df %>% 
+  group_by(Experiment, AgeGroup) %>% 
+  summarise(Mean = mean(DSST_9),
+            SD = sd(DSST_9),
+            Min = min(DSST_9),
+            Max = max(DSST_9)) %>% 
+  mutate(Measure = "DSST_9") %>% 
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  select(Measure, everything())
+DSST_9_df
+
+# SBT_Score
+SBT_Score_df <- 
+  Cog_Performance_df %>% 
+  group_by(Experiment, AgeGroup) %>%
+  filter(AgeGroup == "Older") %>% 
+  summarise(Mean = mean(SBT_Score),
+            SD = sd(SBT_Score),
+            Min = min(SBT_Score),
+            Max = max(SBT_Score)) %>% 
+  mutate(Measure = "SBT_Score") %>% 
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  select(Measure, everything())
+SBT_Score_df
+
+# All cognitive measures
+(All_cog_df <- 
+  bind_rows(MMSE_df, DSST_90_df, DSST_9_df, SBT_Score_df))
+
+# Shipley #
+Shipley_Score_df <- 
+  Shipley_Vocab_df %>% 
+  group_by(Experiment, AgeGroup, Subject) %>%
+  summarise(Score = sum(Test.ACC)) %>% 
+  group_by(Experiment, AgeGroup) %>%
+  summarise(Mean = mean(Score),
+            SD = sd(Score),
+            Min = min(Score),
+            Max = max(Score)) %>% 
+  mutate(Measure = "Shipley_Score") %>%
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  select(Measure, everything())
+Shipley_Score_df
+```
+
+
+
+# Compare Measures Between Age Groups
+```{r Compare Measures Between Age Groups}
+
+# Shipley vocabulary
+
+# Subject Data Frame
+Shipley_Score_sub_df <- 
+  Shipley_Vocab_df %>% 
+  group_by(Experiment, AgeGroup, Subject) %>%
+  summarise(Score = sum(Test.ACC)) %>% 
+  mutate(Measure = "Shipley_Score") %>%
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  select(Measure, everything())
+Shipley_Score_sub_df
+
+# Data frames by experiment and age group
+Ship_E1_YA <- Shipley_Score_sub_df %>% filter(Experiment == "Experiment 1", AgeGroup == "Younger")
+Ship_E1_OA <- Shipley_Score_sub_df %>% filter(Experiment == "Experiment 1", AgeGroup == "Older")
+Ship_E2_YA <- Shipley_Score_sub_df %>% filter(Experiment == "Experiment 2", AgeGroup == "Younger")
+Ship_E2_OA <- Shipley_Score_sub_df %>% filter(Experiment == "Experiment 2", AgeGroup == "Older")
+
+# Run t-test for Age Differences in Vocabulary Data
+t.test(Ship_E1_YA$Score, Ship_E1_OA$Score) 
+t.test(Ship_E2_YA$Score, Ship_E2_OA$Score) 
+
+# Education
+
+# Data frames by experiment and age group
+Edu_E1_YA <- Exp1_Demo %>% filter(AgeGroup == "Younger")
+Edu_E1_OA <- Exp1_Demo %>% filter(AgeGroup == "Older")
+Edu_E2_YA <- Exp2_Demo %>% filter(AgeGroup == "Younger")
+Edu_E2_OA <- Exp2_Demo %>% filter(AgeGroup == "Older")
+
+# Run t-test for Age Differences in Self-reported Years of Education
+t.test(Edu_E1_OA$EduYears.Choice1.ValueLabel, Edu_E1_YA$EduYears.Choice1.ValueLabel)
+t.test(Edu_E2_OA$EduYears.Choice1.ValueLabel, Edu_E2_YA$EduYears.Choice1.ValueLabel)
+
+# DSST Span Data
+
+# Data frames by experiment and age group
+Cog_E1_YA <- Exp1_Cog_Performance %>% filter(AgeGroup == "Younger")
+Cog_E1_OA <- Exp1_Cog_Performance %>% filter(AgeGroup == "Older")
+Cog_E2_YA <- Exp2_Cog_Performance %>% filter(AgeGroup == "Younger")
+Cog_E2_OA <- Exp2_Cog_Performance %>% filter(AgeGroup == "Older")
+
+#Run t-test for Age Differences in DSST Span Data
+t.test(Cog_E1_YA$DSST_90, Cog_E1_OA$DSST_90)
+t.test(Cog_E2_YA$DSST_90, Cog_E2_OA$DSST_90)
+
+# Run t-test for Age Differences in DSST Recall
+t.test(Cog_E1_YA$DSST_9, Cog_E1_OA$DSST_9)
+t.test(Cog_E2_YA$DSST_9, Cog_E2_OA$DSST_9)
+
+# MMSE Data
+
+# Run t-test for Age Differences in MMSE
+t.test(Cog_E1_YA$MMSE_Score, Cog_E1_OA$MMSE_Score)
+t.test(Cog_E2_YA$MMSE_Score, Cog_E2_OA$MMSE_Score)
+```
