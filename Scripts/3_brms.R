@@ -1,6 +1,6 @@
 # -----------------------------------------------------------------------------
 # brms analyses of Kemp et al. aging + interpolated testing
-# written by Vanessa Loaiza Feb 2023
+# written by Vanessa Loaiza & Paige Kemp Feb 2023
 # -----------------------------------------------------------------------------
 
 # packages
