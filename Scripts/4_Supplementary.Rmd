@@ -1,6 +1,6 @@
 ---
 title: "Testing Enhances Episodic Memory Updating in Younger and Older Adults"
-author: "Paige Kemp & Chris Wahlheim"
+author: "Paige Kemp"
 Date: "`r Sys.Date()`"
 output:
   html_document:
