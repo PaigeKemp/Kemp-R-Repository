@@ -2,7 +2,7 @@
 ### 2004 Analyses - MPT
 #-------------------------------------------------------------------------------------------------------------
 # this script is to fit the processed data to an MPT model
-# programmed by Vanessa Loaiza August 2023
+# programmed by Vanessa Loaiza & Paige Kemp August 2023
 
 # packages
 pacman::p_load("tidyverse", "TreeBUGS", "ggplot2")
