@@ -1,0 +1,2800 @@
+---
+title: "2004 Analyses"
+author: "Paige Kemp and Chris Wahlheim"
+Date: "`r Sys.Date()`"
+output: html_document
+---
+
+# clear environment
+```{r }
+rm(list=ls())
+```
+
+# load packages
+```{r }
+pacman::p_load("tidyverse", "magrittr", "lme4", "car", "emmeans", "rstatix", "Hmisc", "see", "psycho", "patchwork")
+```
+
+# load data frames
+```{r }
+# load R data file with data structures
+load("../Data/2004_All_Data_df.RData") 
+
+# show objects in R data file
+ls() ## check the code book to understand variables, separate tabs for each experiment
+```
+
+# rename data frame objects
+```{r }
+# Experiment 1
+e1_df <- exp1_test_data_df
+e1_fam_df <- exp1_familiarity_df
+e1_cor_df <- exp1_test_data_df_correction
+
+# Experiment 2
+e2_df <- exp2_test_data_df
+e2_cor_df <- exp2_test_data_df_correction
+```
+
+# set global variables
+```{r }
+# fill color
+younger_fill <- "royalblue1"
+older_fill <- "firebrick1"
+rep_fill <- "#F2EFC7"
+one_fill <- "#F85A3E"
+three_fill <- "#9D96B8"
+
+# optimizer for glmers
+moreControl <- glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5))
+moreControl_l <- lmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5))
+```
+
+# compare retention intervals
+```{r}
+
+## Experiment 1
+
+# Summarize
+e1_ri_df <- 
+  e1_df %>%
+  group_by(age_group, subject) %>%
+  summarise(time_delay = mean(time_delay)) %>% 
+  get_summary_stats(time_delay, show = c("mean", "median", "sd", "min", "max"))
+e1_ri_df
+
+# Data frame
+e1_ri_sub_df <- 
+  e1_df %>% 
+  group_by(age_group, subject) %>%
+  summarise(time_delay = mean(time_delay)) 
+e1_ri_sub_df
+
+# Model
+ri_e1_lm <- lm(time_delay ~ age_group, data = e1_ri_sub_df)
+
+# Estimated means
+emmeans(ri_e1_lm, pairwise ~ age_group)
+
+
+## Experiment 2
+
+# Summarize
+e2_ri_df <- 
+  e2_df %>%
+  group_by(age_group, subject) %>%
+  summarise(time_delay = mean(time_delay)) %>% 
+  get_summary_stats(time_delay, show = c("mean", "median", "sd", "min", "max"))
+e2_ri_df
+
+# Data frame
+e2_ri_sub_df <- 
+  e2_df %>% 
+  group_by(age_group, subject) %>%
+  summarise(time_delay = mean(time_delay)) 
+e2_ri_sub_df
+
+# Model
+ri_e2_lm <- lm(time_delay ~ age_group, data = e2_ri_sub_df)
+
+# Estimated means
+emmeans(ri_e2_lm, pairwise ~ age_group)
+
+```
+
+# compare phase 1 beliefs
+```{r}
+## Experiment 1
+
+# model
+belief_p1_lmer <- 
+  lmer(make_base_beliefs ~ age_group * statementtype + 
+         (1 | subject) + (1 | topic),
+       data = e1_df) 
+
+# anova
+Anova(belief_p1_lmer)
+
+# Pairwise Comparisons
+(belief_p1_lmer_emmeans <- 
+  emmeans(belief_p1_lmer, 
+          list(
+            pairwise ~ age_group,
+            pairwise ~ statementtype,
+            pairwise ~ statementtype | age_group)))
+
+# Extract Estimated Probabilities
+(belief_p1_lmer_emmeans_df <- as_tibble(belief_p1_lmer_emmeans$`emmeans of statementtype | age_group`)
+  %>% mutate_if(is.numeric, round, digits = 2))
+
+## Experiment 2
+
+# model
+belief_p2_lmer <- 
+  lmer(make_base_beliefs ~ age_group * statementtype +
+         (1 | subject) + (1 | topic),
+       data = e2_df) 
+
+# anova
+Anova(belief_p2_lmer)
+
+# Pairwise Comparisons
+(belief_p2_lmer_emmeans <- 
+  emmeans(belief_p2_lmer, 
+          list(
+            pairwise ~ age_group,
+            pairwise ~ statementtype,
+            pairwise ~ statementtype | age_group)))
+
+# Extract Estimated Probabilities
+(belief_p2_lmer_emmeans_df <- as_tibble(belief_p2_lmer_emmeans$`emmeans of statementtype | age_group`)
+  %>% mutate_if(is.numeric, round, digits = 2))
+
+```
+
+## compare correction detection in phase 2
+```{r}
+
+## Experiment 1
+
+# Fit model
+cor_det_e1_glmer <- 
+  glmer(make_detections ~ age_group * statementtype +
+        + (1 | subject) + (1 | topic),
+        data = e1_df,
+        family = binomial) 
+
+# Anova
+Anova(cor_det_e1_glmer)
+
+# Pairwise Comparisons
+cor_det_e1_glmer_emmeans <- emmeans(cor_det_e1_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+cor_det_e1_glmer_emmeans
+
+# Extract Estimated Probabilities
+(cor_det_e1_glmer_emmeans_df <- as_tibble(cor_det_e1_glmer_emmeans$`emmeans of statementtype | age_group`) 
+  %>% mutate_if(is.numeric, round, digits = 2))
+
+
+## Experiment 2
+
+# Fit model
+cor_det_e2_glmer <- 
+  glmer(make_detections ~ age_group * statementtype +
+        + (1 | subject) + (1 | topic),
+        data = e2_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(cor_det_e2_glmer)
+
+# Pairwise Comparisons
+cor_det_e2_glmer_emmeans <- emmeans(cor_det_e2_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+cor_det_e2_glmer_emmeans
+
+# Extract Estimated Probabilities
+(cor_det_e2_glmer_emmeans_df <- as_tibble(cor_det_e2_glmer_emmeans$`emmeans of statementtype | age_group`)
+  %>% mutate_if(is.numeric, round, digits = 2))
+
+
+```
+
+
+## data frames for signal detection responses in phase 2
+```{r }
+## Experiment 1
+
+# create data frames including only one of the misinformation conditions
+exp1_sdt_raw_mis_1 <- exp1_test_data_df %>% filter(statementtype != "misinformation x 3") 
+exp1_sdt_raw_mis_3 <- exp1_test_data_df %>% filter(statementtype != "misinformation x 1") 
+
+# data frame with sdt categories for misinformation X 1
+exp1_sdt_2_mis1_df <- exp1_sdt_raw_mis_1 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_2 = sum(hit_p2), 
+            n_fa_2 = sum(fa_p2), 
+            n_cr_2 = sum(cr_p2),
+            n_miss_2 = sum(miss_p2)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_2 + n_fa_2 + n_cr_2 + n_miss_2))
+exp1_sdt_2_mis1_df$statementtype <- "misinformation x 1"
+
+# data frame with sdt categories for misinformation X 3
+exp1_sdt_2_mis3_df <- exp1_sdt_raw_mis_3 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_2 = sum(hit_p2), 
+            n_fa_2 = sum(fa_p2), 
+            n_cr_2 = sum(cr_p2),
+            n_miss_2 = sum(miss_p2)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_2 + n_fa_2 + n_cr_2 + n_miss_2))
+exp1_sdt_2_mis3_df$statementtype <- "misinformation x 3"
+
+# combine data frames
+(exp1_sdt_2_df <- bind_rows(exp1_sdt_2_mis1_df, exp1_sdt_2_mis3_df))
+
+## Experiment 2
+
+# create data frames including only one of the misinformation conditions
+exp2_sdt_raw_mis_1 <- exp2_test_data_df %>% filter(statementtype != "misinformation x 3") 
+exp2_sdt_raw_mis_3 <- exp2_test_data_df %>% filter(statementtype != "misinformation x 1") 
+
+# data frame with sdt categories for misinformation X 1
+exp2_sdt_2_mis1_df <- exp2_sdt_raw_mis_1 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_2 = sum(hit_p2), 
+            n_fa_2 = sum(fa_p2), 
+            n_cr_2 = sum(cr_p2),
+            n_miss_2 = sum(miss_p2)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_2 + n_fa_2 + n_cr_2 + n_miss_2))
+exp2_sdt_2_mis1_df$statementtype <- "misinformation x 1"
+
+# data frame with sdt categories for misinformation X 3
+exp2_sdt_2_mis3_df <- exp2_sdt_raw_mis_3 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_2 = sum(hit_p2), 
+            n_fa_2 = sum(fa_p2), 
+            n_cr_2 = sum(cr_p2),
+            n_miss_2 = sum(miss_p2)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_2 + n_fa_2 + n_cr_2 + n_miss_2))
+exp2_sdt_2_mis3_df$statementtype <- "misinformation x 3"
+
+# combine data frames
+(exp2_sdt_2_df <- bind_rows(exp2_sdt_2_mis1_df, exp2_sdt_2_mis3_df))
+```
+
+## estimates for signal detection estimates in phase 2
+```{r }
+## Experiment 1
+
+# sdt indices
+exp1_sdt_2_indices <- psycho::dprime(exp1_sdt_2_df$n_hit_2, exp1_sdt_2_df$n_fa_2, exp1_sdt_2_df$n_miss_2, exp1_sdt_2_df$n_cr_2)
+
+# add indices to response frequency data frame
+exp1_sdt_2_ind_df <- cbind(exp1_sdt_2_df, exp1_sdt_2_indices) %>% 
+  mutate_if(is.numeric, round, digits = 2)
+
+# add time delay to data frame
+exp1_time_delay_sdt <- exp1_test_data_df %>% group_by(subject) %>% summarise(time_delay = mean(time_delay))
+exp1_sdt_2_df <- left_join(exp1_sdt_2_ind_df, exp1_time_delay_sdt) 
+
+## Experiment 2
+
+# sdt indices
+exp2_sdt_2_indices <- psycho::dprime(exp2_sdt_2_df$n_hit_2, exp2_sdt_2_df$n_fa_2, exp2_sdt_2_df$n_miss_2, exp2_sdt_2_df$n_cr_2)
+
+# add indices to response frequency data frame
+exp2_sdt_2_ind_df <- cbind(exp2_sdt_2_df, exp2_sdt_2_indices) %>% 
+  mutate_if(is.numeric, round, digits = 2)
+
+# add time delay to data frame
+exp2_time_delay_sdt <- exp2_test_data_df %>% group_by(subject) %>% summarise(time_delay = mean(time_delay))
+exp2_sdt_2_df <- left_join(exp2_sdt_2_ind_df, exp2_time_delay_sdt)
+```
+
+
+## compare d_prime in phase 2
+```{r }
+## Experiment 1
+
+# Fit model
+d_prime_2_e1_lmer <- lmer(dprime ~ age_group * statementtype +
+                            (1 | subject), 
+                          data = exp1_sdt_2_df)
+
+# Anova
+Anova(d_prime_2_e1_lmer)
+
+# Pairwise Comparisons
+(d_prime_2_e1_lmer_emmeans <- emmeans(d_prime_2_e1_lmer, 
+                                   list(pairwise ~ age_group,
+                                        pairwise ~ statementtype,
+                                        pairwise ~ statementtype | age_group)))
+
+# Extract Estimated Probabilities
+(d_prime_2_e1_lmer_emmeans_df <- 
+    as_tibble(d_prime_2_e1_lmer_emmeans$`emmeans of statementtype | age_group`)  %>% 
+    mutate_if(is.numeric, round, digits = 2))
+
+# Create variable for SDT index
+d_prime_2_e1_lmer_emmeans_df$sdt <- "d prime"
+
+# Create variable for phase
+d_prime_2_e1_lmer_emmeans_df$phase <- "Phase 2"
+
+# Create variable for experiment
+d_prime_2_e1_lmer_emmeans_df$experiment <- "Experiment 1"
+
+
+## Experiment 2
+
+# Fit model
+d_prime_2_e2_lmer <- lmer(dprime ~ age_group * statementtype +
+                            (1 | subject), 
+                          data = exp2_sdt_2_df)
+
+# Anova
+Anova(d_prime_2_e2_lmer)
+
+# Pairwise Comparisons
+(d_prime_2_e2_lmer_emmeans <- emmeans(d_prime_2_e2_lmer, 
+                                   list(pairwise ~ age_group,
+                                        pairwise ~ statementtype,
+                                        pairwise ~ statementtype | age_group)))
+
+# Extract Estimated Probabilities
+(d_prime_2_e2_lmer_emmeans_df <- 
+    as_tibble(d_prime_2_e2_lmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate_if(is.numeric, round, digits = 2))
+
+# Create variable for SDT index
+d_prime_2_e2_lmer_emmeans_df$sdt <- "d prime"
+
+# Create variable for phase
+d_prime_2_e2_lmer_emmeans_df$phase <- "Phase 2"
+
+# Create variable for experiment
+d_prime_2_e2_lmer_emmeans_df$experiment <- "Experiment 2"
+
+# Create data frame combining estimates across experiments
+d_prime_2_e12_lmer_emmeans_df <- 
+  bind_rows(d_prime_2_e1_lmer_emmeans_df, d_prime_2_e2_lmer_emmeans_df)
+
+```
+
+## Compare c in phase 2
+```{r }
+## Experiment 1
+
+# Fit model
+c_2_e1_lmer <- lmer(c ~ age_group * statementtype +
+                      (1 | subject),
+                    data = exp1_sdt_2_df)
+
+# Anova
+Anova(c_2_e1_lmer)
+
+# Pairwise Comparisons
+(c_2_e1_lmer_emmeans <- emmeans(c_2_e1_lmer, 
+                          list(pairwise ~ age_group,
+                               pairwise ~ statementtype,
+                               pairwise ~ statementtype | age_group)))
+
+
+# Extract Estimated Probabilities
+(c_2_e1_lmer_emmeans_df <- as_tibble(c_2_e1_lmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+  mutate_if(is.numeric, round, digits = 2))
+
+
+# Create variable for SDT index
+c_2_e1_lmer_emmeans_df$sdt <- "c"
+
+# Create variable for phase
+c_2_e1_lmer_emmeans_df$phase <- "Phase 2"
+
+# Create variable for experiment
+c_2_e1_lmer_emmeans_df$experiment <- "Experiment 1"
+
+## Experiment 2
+
+# Fit model
+c_2_e2_lmer <- lmer(c ~ age_group * statementtype +
+                      (1 | subject), 
+                    data = exp2_sdt_2_df)
+
+# Anova
+Anova(c_2_e2_lmer)
+
+# Pairwise Comparisons
+(c_2_e2_lmer_emmeans <- emmeans(c_2_e2_lmer, 
+                          list(pairwise ~ age_group,
+                               pairwise ~ statementtype,
+                               pairwise ~ statementtype | age_group)))
+
+
+# Extract Estimated Probabilities
+(c_2_e2_lmer_emmeans_df <- as_tibble(c_2_e2_lmer_emmeans$`emmeans of statementtype | age_group`)%>% 
+  mutate_if(is.numeric, round, digits = 2))
+
+# Create variable for SDT index
+c_2_e2_lmer_emmeans_df$sdt <- "c"
+
+# Create variable for phase
+c_2_e2_lmer_emmeans_df$phase <- "Phase 2"
+
+# Create variable for experiment
+c_2_e2_lmer_emmeans_df$experiment <- "Experiment 2"
+
+# Create data frame combining estimates across experiments
+c_2_e12_lmer_emmeans_df <- 
+  bind_rows(c_2_e1_lmer_emmeans_df, c_2_e2_lmer_emmeans_df)
+```
+
+## compare correction recognition in Phase 3
+```{r }
+
+## Experiment 1
+
+# Fit model
+cor_response_e1_glmer <- 
+  glmer(correction_2_resp ~ age_group * statementtype + time_delay
+        + (1 | subject) + (1 | topic),
+        data = e1_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(cor_response_e1_glmer)
+
+# Pairwise Comparisons
+cor_response_e1_glmer_emmeans <- emmeans(cor_response_e1_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+cor_response_e1_glmer_emmeans
+
+# Extract Estimated Probabilities
+(cor_response_e1_glmer_emmeans_df <- as_tibble(cor_response_e1_glmer_emmeans$`emmeans of statementtype | age_group`) 
+  %>% mutate_if(is.numeric, round, digits = 2))
+
+## Experiment 2
+
+# Fit model
+cor_response_e2_glmer <- 
+  glmer(correction_2_resp ~ age_group * statementtype + time_delay
+        + (1 | subject) + (1 | topic),
+        data = e2_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(cor_response_e2_glmer)
+
+# Pairwise Comparisons
+cor_response_e2_glmer_emmeans <- emmeans(cor_response_e2_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+cor_response_e2_glmer_emmeans
+
+# Extract Estimated Probabilities
+(cor_response_e2_glmer_emmeans_df <- as_tibble(cor_response_e2_glmer_emmeans$`emmeans of statementtype | age_group`) 
+  %>% mutate_if(is.numeric, round, digits = 2))
+```
+
+## data frames for signal detection responses in phase 3
+```{r }
+## Experiment 1
+
+# data frame with sdt categories for misinformation X 1
+exp1_sdt_3_mis1_df <- exp1_sdt_raw_mis_1 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_3 = sum(hit_p3), 
+            n_fa_3 = sum(fa_p3), 
+            n_cr_3 = sum(cr_p3),
+            n_miss_3 = sum(miss_p3)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_3 + n_fa_3 + n_cr_3 + n_miss_3))
+exp1_sdt_3_mis1_df$statementtype <- "misinformation x 1"
+
+# data frame with sdt categories for misinformation X 3
+exp1_sdt_3_mis3_df <- exp1_sdt_raw_mis_3 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_3 = sum(hit_p3), 
+            n_fa_3 = sum(fa_p3), 
+            n_cr_3 = sum(cr_p3),
+            n_miss_3 = sum(miss_p3)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_3 + n_fa_3 + n_cr_3 + n_miss_3))
+exp1_sdt_3_mis3_df$statementtype <- "misinformation x 3"
+
+# combine data frames
+(exp1_sdt_3_df <- bind_rows(exp1_sdt_3_mis1_df, exp1_sdt_3_mis3_df))
+
+## Experiment 2
+
+# data frame with sdt categories for misinformation X 1
+exp2_sdt_3_mis1_df <- exp2_sdt_raw_mis_1 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_3 = sum(hit_p3), 
+            n_fa_3 = sum(fa_p3), 
+            n_cr_3 = sum(cr_p3),
+            n_miss_3 = sum(miss_p3)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_3 + n_fa_3 + n_cr_3 + n_miss_3))
+exp2_sdt_3_mis1_df$statementtype <- "misinformation x 1"
+
+# data frame with sdt categories for misinformation X 3
+exp2_sdt_3_mis3_df <- exp2_sdt_raw_mis_3 %>%
+  group_by(age_group, subject) %>%
+  summarise(n_hit_3 = sum(hit_p3), 
+            n_fa_3 = sum(fa_p3), 
+            n_cr_3 = sum(cr_p3),
+            n_miss_3 = sum(miss_p3)) %>%
+  group_by(subject) %>%
+  mutate(Total = sum(n_hit_3 + n_fa_3 + n_cr_3 + n_miss_3))
+exp2_sdt_3_mis3_df$statementtype <- "misinformation x 3"
+
+# combine data frames
+(exp2_sdt_3_df <- bind_rows(exp2_sdt_3_mis1_df, exp2_sdt_3_mis3_df))
+```
+
+## estimates for signal detection estimates in phase 3
+```{r }
+## Experiment 1
+
+# sdt indices
+exp1_sdt_3_indices <- psycho::dprime(exp1_sdt_3_df$n_hit_3, exp1_sdt_3_df$n_fa_3, exp1_sdt_3_df$n_miss_3, exp1_sdt_3_df$n_cr_3)
+
+# add indices to response frequency data frame
+exp1_sdt_3_ind_df <- cbind(exp1_sdt_3_df, exp1_sdt_3_indices) %>% 
+  mutate_if(is.numeric, round, digits = 2)
+
+# add time delay to data frame
+exp1_time_delay_sdt <- exp1_test_data_df %>% group_by(subject) %>% summarise(time_delay = mean(time_delay))
+exp1_sdt_3_df <- left_join(exp1_sdt_3_ind_df, exp1_time_delay_sdt) 
+
+## Experiment 2
+
+# sdt indices
+exp2_sdt_3_indices <- psycho::dprime(exp2_sdt_3_df$n_hit_3, exp2_sdt_3_df$n_fa_3, exp2_sdt_3_df$n_miss_3, exp2_sdt_3_df$n_cr_3)
+
+# add indices to response frequency data frame
+exp2_sdt_3_ind_df <- cbind(exp2_sdt_3_df, exp2_sdt_3_indices) %>% 
+  mutate_if(is.numeric, round, digits = 2)
+
+# add time delay to data frame
+exp2_time_delay_sdt <- exp2_test_data_df %>% group_by(subject) %>% summarise(time_delay = mean(time_delay))
+exp2_sdt_3_df <- left_join(exp2_sdt_3_ind_df, exp2_time_delay_sdt)
+```
+
+## compare d_prime in phase 3
+```{r }
+## Experiment 1
+
+# Fit model
+d_prime_3_e1_lmer <- lmer(dprime ~ age_group * statementtype + time_delay +
+                            (1 | subject), 
+                      data = exp1_sdt_3_df)
+
+# Anova
+Anova(d_prime_3_e1_lmer)
+
+# Pairwise Comparisons
+(d_prime_3_e1_lmer_emmeans <- emmeans(d_prime_3_e1_lmer, 
+                                   list(pairwise ~ age_group,
+                                        pairwise ~ statementtype,
+                                        pairwise ~ statementtype | age_group)))
+
+# Extract Estimated Probabilities
+(d_prime_3_e1_lmer_emmeans_df <- 
+    as_tibble(d_prime_3_e1_lmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate_if(is.numeric, round, digits = 2))
+
+
+# Create variable for SDT index
+d_prime_3_e1_lmer_emmeans_df$sdt <- "d prime"
+
+# Create variable for phase
+d_prime_3_e1_lmer_emmeans_df$phase <- "Phase 3"
+
+# Create variable for experiment
+d_prime_3_e1_lmer_emmeans_df$experiment <- "Experiment 1"
+
+
+## Experiment 2
+
+# Fit model
+d_prime_3_e2_lmer <- lmer(dprime ~ age_group * statementtype + time_delay +
+                            (1 | subject), 
+                          data = exp2_sdt_3_df)
+
+# Anova
+Anova(d_prime_3_e2_lmer)
+
+# Pairwise Comparisons
+(d_prime_3_e2_lmer_emmeans <- emmeans(d_prime_3_e2_lmer, 
+                                   list(pairwise ~ age_group,
+                                        pairwise ~ statementtype,
+                                        pairwise ~ statementtype | age_group)))
+
+# Extract Estimated Probabilities
+(d_prime_3_e2_lmer_emmeans_df <- 
+    as_tibble(d_prime_3_e2_lmer_emmeans$`emmeans of statementtype | age_group`)%>% 
+    mutate_if(is.numeric, round, digits = 2))
+
+# Create variable for SDT index
+d_prime_3_e2_lmer_emmeans_df$sdt <- "d prime"
+
+# Create variable for phase
+d_prime_3_e2_lmer_emmeans_df$phase <- "Phase 3"
+
+# Create variable for experiment
+d_prime_3_e2_lmer_emmeans_df$experiment <- "Experiment 2"
+
+# Create data frame combining estimates across experiments
+d_prime_3_e12_lmer_emmeans_df <- 
+  bind_rows(d_prime_3_e1_lmer_emmeans_df, d_prime_3_e2_lmer_emmeans_df)
+```
+
+## Compare c in phase 3
+```{r }
+## Experiment 1
+
+# Fit model
+c_3_e1_lmer <- lmer(c ~ age_group * statementtype + time_delay +
+                  (1 | subject), 
+                data = exp1_sdt_3_df)
+
+# Anova
+Anova(c_3_e1_lmer)
+
+# Pairwise Comparisons
+c_3_e1_lmer_emmeans <- emmeans(c_3_e1_lmer, 
+                          list(pairwise ~ age_group,
+                               pairwise ~ statementtype,
+                               pairwise ~ statementtype | age_group))
+
+
+# Extract Estimated Probabilities
+(c_3_e1_lmer_emmeans_df <- as_tibble(c_3_e1_lmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+  mutate_if(is.numeric, round, digits = 2))
+
+# Create variable for SDT index
+c_3_e1_lmer_emmeans_df$sdt <- "c"
+
+# Create variable for phase
+c_3_e1_lmer_emmeans_df$phase <- "Phase 3"
+
+# Create variable for experiment
+c_3_e1_lmer_emmeans_df$experiment <- "Experiment 1"
+
+
+## Experiment 2
+
+# Fit model
+c_3_e2_lmer <- lmer(c ~ age_group * statementtype + time_delay +
+                  (1 | subject), 
+                data = exp2_sdt_3_df)
+
+# Anova
+Anova(c_3_e2_lmer)
+
+# Pairwise Comparisons
+c_3_e2_lmer_emmeans <- emmeans(c_3_e2_lmer, 
+                          list(pairwise ~ age_group,
+                               pairwise ~ statementtype,
+                               pairwise ~ statementtype | age_group))
+
+
+# Extract Estimated Probabilities
+(c_3_e2_lmer_emmeans_df <- as_tibble(c_3_e2_lmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+  mutate_if(is.numeric, round, digits = 2))
+
+# Create variable for SDT index
+c_3_e2_lmer_emmeans_df$sdt <- "c"
+
+# Create variable for phase
+c_3_e2_lmer_emmeans_df$phase <- "Phase 3"
+
+# Create variable for experiment
+c_3_e2_lmer_emmeans_df$experiment <- "Experiment 2"
+
+# Create data frame combining estimates across experiments
+c_3_e12_lmer_emmeans_df <- 
+  bind_rows(c_3_e1_lmer_emmeans_df, c_3_e2_lmer_emmeans_df)
+```
+
+## combine sdt plots for visualization
+```{r}
+# d prime
+d_prime_all_df <- 
+  bind_rows(d_prime_2_e12_lmer_emmeans_df, d_prime_3_e12_lmer_emmeans_df) %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures"))
+
+# c
+c_all_df <- 
+  bind_rows(c_2_e12_lmer_emmeans_df, c_3_e12_lmer_emmeans_df) %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures"))
+```
+
+## visualize d prime estimates
+```{r fig.height=6, fig.width=6}
+# Re-order factor levels
+d_prime_all_df$age_group %<>% factor(levels = c("Younger", "Older"))
+d_prime_all_df$statementtype %<>% factor(levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+
+# Plot
+sdt_d_p <- 
+  d_prime_all_df %>% 
+  ggplot(aes(x = age_group, y = emmean, fill = statementtype)) +
+  facet_grid(experiment ~ phase) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(position = position_dodge(width = .5), stroke = .3, shape = 21, size = 4) +
+  scale_fill_manual(values = c("One Fake News Exposure" = one_fill, "Three Fake News Exposures" = three_fill)) +
+  scale_y_continuous(expand = c(0.025, 0.025), limits = c(.70, 2.30), breaks = seq(.75, 2.25, .25)) +
+  xlab("Age Group") +
+  ylab("Sensitivity (d')") +
+  theme(legend.position = c(.22,.58),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+sdt_d_p
+```
+
+## visualize criterion estimates
+```{r fig.height=6, fig.width=6}
+# Re-order factor levels
+c_all_df$age_group %<>% factor(levels = c("Younger", "Older"))
+c_all_df$statementtype %<>% factor(levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+
+# Plot
+sdt_c_p <- 
+  c_all_df %>% 
+  ggplot(aes(x = age_group, y = emmean, fill = statementtype)) +
+  facet_grid(experiment ~ phase) +
+  geom_hline(yintercept = 0,linetype = 2) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(position = position_dodge(width = .5), stroke = .3, shape = 21, size = 4) +
+  scale_fill_manual(values = c("One Fake News Exposure" = one_fill, "Three Fake News Exposures" = three_fill)) +
+  scale_y_continuous(expand = c(0.025, 0.025), limits = c(-.50, .50), breaks = seq(-.50, .50, .1)) +
+  xlab("Age Group") +
+  ylab("Bias (c)") +
+  theme(legend.position = c(.22, .58),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+sdt_c_p
+```
+
+# Combine sdt plots
+```{r fig.height=6, fig.width=12.75}
+(sdt_plots_p <- 
+   sdt_d_p + sdt_c_p + 
+   plot_layout(width = 12.75, height = 6.5) + 
+   plot_annotation(tag_levels = 'A'))
+
+ggsave("../Figures/Fig2.pdf", plot = sdt_plots_p, width = 12, height = 6.5, units = "in", dpi = 600)
+```
+
+## compare recognition in experiment 1
+```{r}
+## Correct recognition hits
+
+# Fit model
+recog_glmer <- 
+  glmer(recog_1_correct ~ age_group * statementtype + time_delay +
+         (1 | subject) + (1 | topic),
+        data = e1_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_glmer)
+
+# Pairwise Comparisons
+recog_glmer_emmeans <- emmeans(recog_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+recog_glmer_emmeans
+
+# Extract Estimated Probabilities
+(recog_glmer_emmeans_df <- as_tibble(recog_glmer_emmeans$`emmeans of statementtype | age_group`))
+
+
+## Fake news false alarms
+
+# Fit model
+fake_intru_e1_glmer <- 
+  glmer(recog_1_misinfo ~ age_group * statementtype + time_delay +
+         (1 | subject) + (1 | topic),
+        data = e1_df,
+        family = binomial) 
+
+# Anova
+Anova(fake_intru_e1_glmer)
+
+# Pairwise Comparisons
+fake_intru_e1_glmer_emmeans <- emmeans(fake_intru_e1_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+fake_intru_e1_glmer_emmeans
+
+# Extract Estimated Probabilities
+(fake_intru_e1_glmer_emmeans_df <- as_tibble(fake_intru_e1_glmer_emmeans$`emmeans of statementtype | age_group`))
+
+## Correct fake news hits
+
+# Fit model
+fake_recog_glmer <- 
+  glmer(recog_3_misinfo ~ age_group * statementtype + time_delay +
+         (1 | subject) + (1 | topic),
+        data = e1_df,
+        family = binomial, 
+        control = moreControl) 
+
+# Anova
+Anova(fake_recog_glmer)
+
+# Pairwise Comparisons
+fake_recog_glmer_emmeans <- emmeans(fake_recog_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group,
+  pairwise ~ age_group | statementtype),
+  type = "response")
+fake_recog_glmer_emmeans
+
+# Extract Estimated Probabilities
+(fake_recog_glmer_emmeans_df <- as_tibble(fake_recog_glmer_emmeans$`emmeans of statementtype | age_group`))
+
+```
+
+## Figure 3: panel A correct recognition hits (experiment 1)
+```{r fig.height=4, fig.width=4}
+# Rename variables
+recog_glmer_emmeans_df_2 <- recog_glmer_emmeans_df %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "Fake (1X), Real (1X)", 
+                                ifelse(statementtype == "misinformation x 3","Fake (3X), Real (1X)",
+                                       ifelse(statementtype == "repeated" ,"Real (1X), Real (1X)", ""))))
+
+# Re-order factor levels
+recog_glmer_emmeans_df_2$statementtype %<>% 
+  factor(levels = c("Real (1X), Real (1X)","Fake (1X), Real (1X)", "Fake (3X), Real (1X)"))
+recog_glmer_emmeans_df_2$age_group %<>% factor(levels = c("Younger", "Older"))
+
+# Plot
+Fig3a_p <-
+  recog_glmer_emmeans_df_2 %>% 
+  ggplot(aes(x = age_group, y = prob, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = statementtype), position = position_dodge(width = .5), size = 4, shape = 21) +
+  scale_fill_manual(values = c(rep_fill, one_fill, three_fill)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Correct Recognition of Real News", x = "Age Group") +
+  theme(legend.position = c(.24, .14),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3a_p
+```
+
+## Figure 3: panel B fake news false alarms (experiment 1)
+```{r fig.height=4, fig.width=4}
+# Rename variables
+fake_intru_e1_glmer_emmeans_df_2 <- fake_intru_e1_glmer_emmeans_df %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "Fake (1X), Real (1X)", 
+                                ifelse(statementtype == "misinformation x 3","Fake (3X), Real (1X)",
+                                       ifelse(statementtype == "repeated" ,"Real (1X), Real (1X)", ""))))
+
+# Re-order factor levels
+fake_intru_e1_glmer_emmeans_df_2$statementtype %<>% 
+  factor(levels = c("Real (1X), Real (1X)","Fake (1X), Real (1X)", "Fake (3X), Real (1X)"))
+fake_intru_e1_glmer_emmeans_df_2$age_group %<>% factor(levels = c("Younger", "Older"))
+
+# Plot
+Fig3b_p <-
+  fake_intru_e1_glmer_emmeans_df_2 %>% 
+  ggplot(aes(x = age_group, y = prob, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = statementtype), position = position_dodge(width = .5), size = 4, shape = 21) +
+  scale_fill_manual(values = c(rep_fill, one_fill, three_fill)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "False Recognition of Fake News", x = "Age Group") +
+  theme(legend.position = c(.24, .88),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3b_p
+```
+
+## Figure 3: panel C correct fake news hits (experiment 1)
+```{r fig.height=4, fig.width=4}
+# Rename variables
+fake_recog_glmer_emmeans_df_2 <- fake_recog_glmer_emmeans_df %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "Fake (1X), Real (1X)", 
+                                ifelse(statementtype == "misinformation x 3","Fake (3X), Real (1X)",
+                                       ifelse(statementtype == "repeated" ,"Real (1X), Real (1X)", ""))))
+
+# Re-order factor levels
+fake_recog_glmer_emmeans_df_2$statementtype %<>% 
+  factor(levels = c("Real (1X), Real (1X)","Fake (1X), Real (1X)", "Fake (3X), Real (1X)"))
+fake_recog_glmer_emmeans_df_2$age_group %<>% factor(levels = c("Younger", "Older"))
+
+# Plot
+Fig3c_p <-
+  fake_recog_glmer_emmeans_df_2 %>% 
+  ggplot(aes(x = age_group, y = prob, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = statementtype), position = position_dodge(width = .5), size = 4, shape = 21) +
+  scale_fill_manual(values = c(rep_fill, one_fill, three_fill)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Correct Recognition of Fake News", x = "Age Group") +
+  theme(legend.position = c(.24, .875),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3c_p
+```
+
+## compare cued recall in experiment 2
+```{r}
+## Correct real news recall
+
+# Fit model
+cued_recall_glmer <- 
+  glmer(recall_1_correct ~ age_group * statementtype + time_delay +
+         (1 | subject) + (1 | topic),
+        data = e2_df,
+        family = binomial) 
+
+# Anova
+Anova(cued_recall_glmer)
+
+# Pairwise Comparisons
+cued_recall_glmer_emmeans <- emmeans(cued_recall_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+cued_recall_glmer_emmeans
+
+# Extract Estimated Probabilities
+(cued_recall_glmer_emmeans_df <- as_tibble(cued_recall_glmer_emmeans$`emmeans of statementtype | age_group`))
+
+
+## Intrusions of fake news
+
+# Fit model
+fake_intru_glmer <- 
+  glmer(recall_1_misinfo ~ age_group * statementtype +
+         (1 | subject) + (1 | topic),
+        data = e2_df,
+        family = binomial) 
+
+# Anova
+Anova(fake_intru_glmer)
+
+# Pairwise Comparisons
+fake_intru_glmer_emmeans <- emmeans(fake_intru_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ statementtype | age_group),
+  type = "response")
+fake_intru_glmer_emmeans
+
+# Extract Estimated Probabilities
+(fake_intru_glmer_emmeans_df <- as_tibble(fake_intru_glmer_emmeans$`emmeans of statementtype | age_group`))
+
+
+## Correct fake news recall
+
+# Fit model
+fake_recall_glmer <- 
+  glmer(recall_3_misinfo ~ age_group * statementtype + time_delay +
+         (1 | subject) + (1 | topic),
+        data = e2_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(fake_recall_glmer)
+
+# Pairwise Comparisons
+fake_recall_glmer_emmeans <- emmeans(fake_recall_glmer, list(
+  pairwise ~ age_group,
+  pairwise ~ statementtype,
+  pairwise ~ age_group | statementtype),
+  type = "response")
+fake_recall_glmer_emmeans
+
+# Extract Estimated Probabilities
+(fake_recall_glmer_emmeans_df <- as_tibble(fake_recall_glmer_emmeans$`emmeans of age_group | statementtype`))
+
+```
+
+## Figure 3: panel D correct real news recall (experiment 2) 
+```{r fig.height=4, fig.width=4}
+# Rename variables
+cued_recall_glmer_emmeans_df_2 <- cued_recall_glmer_emmeans_df %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "Fake (1X), Real (1X)", 
+                                ifelse(statementtype == "misinformation x 3","Fake (3X), Real (1X)",
+                                       ifelse(statementtype == "repeated" ,"Real (1X), Real (1X)", ""))))
+
+# Re-order factor levels
+cued_recall_glmer_emmeans_df_2$statementtype %<>% 
+  factor(levels = c("Real (1X), Real (1X)","Fake (1X), Real (1X)", "Fake (3X), Real (1X)"))
+cued_recall_glmer_emmeans_df_2$age_group %<>% factor(levels = c("Younger", "Older"))
+
+# Plot
+Fig3d_p <-
+  cued_recall_glmer_emmeans_df_2 %>% 
+  ggplot(aes(x = age_group, y = prob, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = statementtype), position = position_dodge(width = .5), size = 4, shape = 21) +
+  scale_fill_manual(values = c(rep_fill, one_fill, three_fill)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Correct Recall of Real News", x = "Age Group") +
+  theme(legend.position = c(.24, .875),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3d_p
+```
+
+## Figure 3: panel E intrusions of fake news (experiment 2)
+```{r fig.height=4, fig.width=4}
+# Rename variables
+fake_intru_glmer_emmeans_df_2 <- fake_intru_glmer_emmeans_df %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "Fake (1X), Real (1X)", 
+                                ifelse(statementtype == "misinformation x 3","Fake (3X), Real (1X)",
+                                       ifelse(statementtype == "repeated" ,"Real (1X), Real (1X)", ""))))
+
+# Re-order factor levels
+fake_intru_glmer_emmeans_df_2$statementtype %<>% 
+  factor(levels = c("Real (1X), Real (1X)","Fake (1X), Real (1X)", "Fake (3X), Real (1X)"))
+fake_intru_glmer_emmeans_df_2$age_group %<>% factor(levels = c("Younger", "Older"))
+
+# Plot
+Fig3e_p <-
+  fake_intru_glmer_emmeans_df_2 %>% 
+  ggplot(aes(x = age_group, y = prob, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = statementtype), position = position_dodge(width = .5), size = 4, shape = 21) +
+  scale_fill_manual(values = c(rep_fill, one_fill, three_fill)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Intrusions of Fake News", x = "Age Group") +
+  theme(legend.position = c(.24, .875),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3e_p
+```
+
+## Figure 3: panel F correct fake news recall (experiment 2)
+```{r fig.height=4, fig.width=4}
+# Rename variables
+fake_recall_glmer_emmeans_df_2 <- fake_recall_glmer_emmeans_df %>% 
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "Fake (1X), Real (1X)", 
+                                ifelse(statementtype == "misinformation x 3","Fake (3X), Real (1X)",
+                                       ifelse(statementtype == "repeated" ,"Real (1X), Real (1X)", ""))))
+
+# Re-order factor levels
+fake_recall_glmer_emmeans_df_2$statementtype %<>% 
+  factor(levels = c("Real (1X), Real (1X)","Fake (1X), Real (1X)", "Fake (3X), Real (1X)"))
+fake_recall_glmer_emmeans_df_2$age_group %<>% factor(levels = c("Younger", "Older"))
+
+# Plot
+Fig3f_p <-
+  fake_recall_glmer_emmeans_df_2 %>% 
+  ggplot(aes(x = age_group, y = prob, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(fill = statementtype), position = position_dodge(width = .5), size = 4, shape = 21) +
+  scale_fill_manual(values = c(rep_fill, one_fill, three_fill)) + 
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.025, 1.025), breaks = seq(0, 1, .1)) +
+  labs(y = "Correct Recall of Fake News", x = "Age Group") +
+  theme(legend.position = c(.24, .875),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+Fig3f_p
+```
+
+## Figure 3: Combined Cued recall estimated probabilities only
+```{r fig.height=8.5, fig.width=12.5}
+Fig3_p <- ((Fig3a_p | Fig3b_p | Fig3c_p) / (Fig3d_p | Fig3e_p | Fig3f_p) ) + 
+  plot_annotation(tag_levels = 'A')
+Fig3_p
+
+ggsave("../Figures/Fig3.pdf", plot = Fig3_p, width = 12.5, height = 8.5, units = "in", dpi = 320)
+```
+
+## Model conditional real news recognition for corrections in experiment 1 (All) 
+```{r}
+# Fit model
+recog_corrections_cond_glmer <- 
+  glmer(recog_1_correct ~ age_group * detection_p2 * recog_3_misinfo_p3 * statementtype + 
+          (1 | subject) + (1 | topic), 
+        data = e1_cor_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_corrections_cond_glmer)
+
+# Pairwise Comparisons
+(recog_corrections_cond_glmer_emmeans <- 
+  emmeans(recog_corrections_cond_glmer, list(
+    pairwise ~ detection_p2,
+    pairwise ~ recog_3_misinfo_p3,
+    pairwise ~ statementtype,
+    pairwise ~ detection_p2 | recog_3_misinfo_p3,
+    pairwise ~ recog_3_misinfo_p3 | statementtype,
+    pairwise ~ age_group | detection_p2 | recog_3_misinfo_p3,
+    pairwise ~ age_group | recog_3_misinfo_p3 | statementtype),
+    type = "response"))
+```
+
+## Model conditional real news recognition for corrections in experiment 1 (Detected & Fake News Identified)  
+```{r}
+# Fit model
+recog_corrections_cond_1_glmer <- 
+  glmer(recog_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recollect == "Detected, Recollected"),
+        family = binomial,
+        control = moreControl)
+
+# Anova
+Anova(recog_corrections_cond_1_glmer)
+
+# Pairwise Comparisons
+(recog_corrections_cond_1_glmer_emmeans <- 
+  emmeans(recog_corrections_cond_1_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_corrections_cond_1_glmer_emmeans_df <- 
+  as_tibble(recog_corrections_cond_1_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Detected, Recollected", experiment = "Experiment 1"))
+```
+
+## Model conditional real news recognition for corrections in experiment 1 (Detected & Fake News Not Identified) 
+```{r}
+# Fit model
+recog_corrections_cond_2_glmer <- 
+  glmer(recog_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recollect == "Detected, Not Recollected"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_corrections_cond_2_glmer)
+
+# Pairwise Comparisons
+(recog_corrections_cond_2_glmer_emmeans <- 
+  emmeans(recog_corrections_cond_2_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_corrections_cond_2_glmer_emmeans_df <- 
+  as_tibble(recog_corrections_cond_2_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Detected, Not Recollected", experiment = "Experiment 1"))
+```
+
+## Model conditional real news recognition for corrections in experiment 1 (Not Detected & Fake News Identified) 
+```{r}
+# Fit model
+recog_corrections_cond_3_glmer <- 
+  glmer(recog_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recollect == "Not Detected, Recollected"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_corrections_cond_3_glmer)
+
+# Pairwise Comparisons
+(recog_corrections_cond_3_glmer_emmeans <- 
+  emmeans(recog_corrections_cond_3_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_corrections_cond_3_glmer_emmeans_df <- 
+  as_tibble(recog_corrections_cond_3_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Not Detected, Recollected", experiment = "Experiment 1"))
+```
+
+## Model conditional real news recognition for corrections in experiment 1 (Not Detected & Fake News Not Identified) 
+```{r}
+# Fit model
+recog_corrections_cond_4_glmer <- 
+  glmer(recog_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recollect == "Not Detected, Not Recollected"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_corrections_cond_4_glmer)
+
+# Pairwise Comparisons
+(recog_corrections_cond_4_glmer_emmeans <- 
+  emmeans(recog_corrections_cond_4_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_corrections_cond_4_glmer_emmeans_df <- 
+  as_tibble(recog_corrections_cond_4_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Not Detected, Not Recollected", experiment = "Experiment 1"))
+```
+
+## Combine data frames with correct real news recall conditionals for visualization
+```{r}
+# Combine data frames with conditionals
+(recog_corrections_cond_glmer_emmeans_df <- 
+  bind_rows(recog_corrections_cond_1_glmer_emmeans_df,
+            recog_corrections_cond_2_glmer_emmeans_df,
+            recog_corrections_cond_3_glmer_emmeans_df,
+            recog_corrections_cond_4_glmer_emmeans_df) %>% 
+  select(-SE, -df))
+
+# Compute cell counts
+(recog_corrections_cond_count_df <- 
+  e1_cor_df %>% 
+  group_by(age_group, statementtype, correction_detect_recollect) %>% 
+  summarise(obs = n()) %>%
+  ungroup() %>%
+  group_by(age_group) %>% 
+  mutate(obs_prop = prop.table(obs)))
+
+# Join data frames
+(recog_corrections_cond_df <- 
+  full_join(recog_corrections_cond_glmer_emmeans_df, recog_corrections_cond_count_df) %>%
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(detect = ifelse(correction_detect_recollect == "Detected, Recollected" | correction_detect_recollect == "Detected, Not Recollected", "Correction Detected", "Correction Not Detected")) %>% 
+  mutate(recollect = ifelse(correction_detect_recollect == "Detected, Recollected" | correction_detect_recollect == "Not Detected, Recollected", "Fake News Recognized", "Fake News Not Recognized")) %>%   
+  select(statementtype, age_group, obs, obs_prop, everything()))
+```
+
+## visualize conditional correct real news recall: experiment 1
+```{r fig.height=6, fig.width=6}
+# Re-order factor levels
+recog_corrections_cond_df$age_group %<>% factor(levels = c("Younger", "Older"))
+recog_corrections_cond_df$statementtype %<>% factor(levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+recog_corrections_cond_df$detect %<>% factor(levels = c("Correction Detected", "Correction Not Detected"))
+recog_corrections_cond_df$recollect %<>% factor(levels = c("Fake News Recognized", "Fake News Not Recognized"))
+
+# Plot
+recog_corrections_cond_p <- 
+  recog_corrections_cond_df %>% 
+  ggplot(aes(x = age_group, y = prob, fill = statementtype)) +
+  facet_grid(recollect ~ detect) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs), position = position_dodge(width = .5), stroke = .3, shape = 21) +
+  scale_fill_manual(values = c("One Fake News Exposure" = one_fill, "Three Fake News Exposures" = three_fill)) +
+  scale_y_continuous(expand = c(0.025, 0.025), limits = c(0, 1), breaks = seq(0, 1, .1)) +
+  scale_size_area(max_size = 7) +
+  xlab("Age Group") +
+  ylab("Correct Recognition of Real News") +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  theme(legend.position = c(.22,.58),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+recog_corrections_cond_p
+```
+
+## Model conditional false recognition of fake news for corrections in experiment 1 (All) 
+```{r}
+
+# Paige, I removed time as fixed effect because it was not allowing the model to converge
+
+# Fit model
+recog_fake_intrus_cond_glmer <- 
+  glmer(recog_1_misinfo ~ age_group * detection_p2 * correction_resp_p3 * statementtype + 
+          (1 | subject) + (1 | topic),
+        data = e1_cor_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_fake_intrus_cond_glmer)
+
+# Pairwise Comparisons
+(recog_fake_intrus_cond_glmer_emmeans <- 
+  emmeans(recog_fake_intrus_cond_glmer, list(
+    pairwise ~ detection_p2,
+    pairwise ~ correction_resp_p3,
+    pairwise ~ statementtype,
+    pairwise ~ detection_p2 | correction_resp_p3,
+    pairwise ~ correction_resp_p3 | statementtype),
+    type = "response"))
+```
+
+
+## Model conditional false recognition of fake news for corrections in experiment 1 (Detected & Correction Remembered) 
+```{r}
+# Fit model
+recog_fake_intrus_cond_1_glmer <- 
+  glmer(recog_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recognize == "Detected, Recognized"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_fake_intrus_cond_1_glmer)
+
+# Pairwise Comparisons
+(recog_fake_intrus_cond_1_glmer_emmeans <- 
+  emmeans(recog_fake_intrus_cond_1_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_fake_intrus_cond_1_glmer_df <- 
+  as_tibble(recog_fake_intrus_cond_1_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize = "Detected, Recognized", experiment = "Experiment 1"))
+```
+
+## Model conditional false recognition of fake news for corrections in experiment 1 (Detected & Correction Not Remembered) 
+```{r}
+# Fit model
+recog_fake_intrus_cond_2_glmer <- 
+  glmer(recog_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recognize == "Detected, Not Recognized"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_fake_intrus_cond_2_glmer)
+
+# Pairwise Comparisons
+(recog_fake_intrus_cond_2_glmer_emmeans <- 
+  emmeans(recog_fake_intrus_cond_2_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_fake_intrus_cond_2_glmer_df <- 
+  as_tibble(recog_fake_intrus_cond_2_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize = "Detected, Not Recognized", experiment = "Experiment 1"))
+```
+
+## Model conditional false recognition of fake news for corrections in experiment 1 (Not Detected & Correction Remembered) 
+```{r}
+
+# Paige, I removed time delay because model would not converge
+
+# Fit model
+recog_fake_intrus_cond_3_glmer <- 
+  glmer(recog_1_misinfo ~ age_group * statementtype + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recognize == "Not Detected, Recognized"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_fake_intrus_cond_3_glmer)
+
+# Pairwise Comparisons
+(recog_fake_intrus_cond_3_glmer_emmeans <- 
+  emmeans(recog_fake_intrus_cond_3_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_fake_intrus_cond_3_glmer_df <- 
+  as_tibble(recog_fake_intrus_cond_3_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize = "Not Detected, Recognized", experiment = "Experiment 1"))
+```
+
+## Model conditional false recognition of fake news for corrections in experiment 1 (Not Detected & Correction Not Remembered) 
+```{r}
+# Fit model
+recog_fake_intrus_cond_4_glmer <- 
+  glmer(recog_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e1_cor_df, correction_detect_recognize == "Not Detected, Not Recognized"),
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recog_fake_intrus_cond_4_glmer)
+
+# Pairwise Comparisons
+(recog_fake_intrus_cond_4_glmer_emmeans <- 
+  emmeans(recog_fake_intrus_cond_4_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recog_fake_intrus_cond_4_glmer_df <- 
+  as_tibble(recog_fake_intrus_cond_4_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize = "Not Detected, Not Recognized", experiment = "Experiment 1"))
+```
+
+## Combine data frames with false recognition of fake news conditionals for visualization
+```{r}
+# Combine data frames with conditionals
+(recog_fake_intrus_cond_glmer_df <- 
+  bind_rows(recog_fake_intrus_cond_1_glmer_df,
+            recog_fake_intrus_cond_2_glmer_df,
+            recog_fake_intrus_cond_3_glmer_df,
+            recog_fake_intrus_cond_4_glmer_df) %>% 
+  select(-SE, -df))
+
+# Compute cell counts
+(recog_fake_intrus_cond_count_df <- 
+  e1_cor_df %>% 
+  group_by(age_group, statementtype, correction_detect_recognize) %>% 
+  summarise(obs = n()) %>%
+  ungroup() %>%
+  group_by(age_group) %>% 
+  mutate(obs_prop = prop.table(obs)))
+
+# Join data frames
+(recog_fake_intrus_cond_df <- 
+  full_join(recog_fake_intrus_cond_glmer_df, recog_fake_intrus_cond_count_df) %>%
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(detect = ifelse(correction_detect_recognize == "Detected, Recognized" | correction_detect_recognize == "Detected, Not Recognized", "Correction Detected", "Correction Not Detected")) %>% 
+  mutate(remember = ifelse(correction_detect_recognize == "Detected, Recognized" | correction_detect_recognize == "Not Detected, Recognized", "Correction Remembered", "Correction Not Remembered")) %>%   
+  select(statementtype, age_group, obs, obs_prop, everything()))
+```
+
+## visualize conditional false recognition of fake news: experiment 1
+```{r fig.height=6, fig.width=6}
+# Re-order factor levels
+recog_fake_intrus_cond_df$age_group %<>% factor(levels = c("Younger", "Older"))
+recog_fake_intrus_cond_df$statementtype %<>% factor(levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+recog_fake_intrus_cond_df$detect %<>% factor(levels = c("Correction Detected", "Correction Not Detected"))
+recog_fake_intrus_cond_df$remember %<>% factor(levels = c("Correction Remembered", "Correction Not Remembered"))
+
+# Plot
+recog_intrusions_cond_p <- 
+  recog_fake_intrus_cond_df %>% 
+  ggplot(aes(x = age_group, y = prob, fill = statementtype)) +
+  facet_grid(remember ~ detect) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs), position = position_dodge(width = .5), stroke = .3, shape = 21) +
+  scale_fill_manual(values = c("One Fake News Exposure" = one_fill, "Three Fake News Exposures" = three_fill)) +
+  scale_y_continuous(expand = c(0.025, 0.025), limits = c(0, 1), breaks = seq(0, 1, .1)) +
+  scale_size_area(max_size = 7) +
+  xlab("Age Group") +
+  ylab("False Recognition of Fake News") +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  theme(legend.position = c(.22, .925),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+recog_intrusions_cond_p
+```
+
+## Model conditional real news recall for corrections in experiment 2 (All) 
+```{r}
+# Fit model
+recall_corrections_cond_glmer <- 
+  glmer(recall_1_correct ~ age_group * detection_p2 * recall_3_misinfo_p3 * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = e2_cor_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recall_corrections_cond_glmer)
+
+# Pairwise Comparisons
+(recall_corrections_cond_glmer_emmeans <- 
+  emmeans(recall_corrections_cond_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ detection_p2,
+    pairwise ~ recall_3_misinfo_p3,
+    pairwise ~ statementtype,
+    pairwise ~ age_group | recall_3_misinfo_p3,
+    pairwise ~ detection_p2 | recall_3_misinfo_p3,
+    pairwise ~ recall_3_misinfo_p3 | statementtype,
+    pairwise ~ age_group | detection_p2 | recall_3_misinfo_p3,
+    pairwise ~ age_group | recall_3_misinfo_p3 | statementtype),
+    type = "response"))
+```
+
+
+
+
+## Model conditional real news recall for corrections in experiment 2 (Detected & Fake News Recalled) 
+```{r}
+# Fit model
+recall_corrections_cond_1_glmer <- 
+  glmer(recall_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recollect == "Detected, Recollected"),
+        family = binomial) 
+
+# Anova
+Anova(recall_corrections_cond_1_glmer)
+
+# Pairwise Comparisons
+(recall_corrections_cond_1_glmer_emmeans <- 
+  emmeans(recall_corrections_cond_1_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recall_corrections_cond_1_glmer_emmeans_df <- 
+  as_tibble(recall_corrections_cond_1_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Detected, Recollected", experiment = "Experiment 2"))
+```
+
+## Model conditional real news recall for corrections in experiment 2 (Detected & Fake News Not Recalled) 
+```{r}
+# Fit model
+recall_corrections_cond_2_glmer <- 
+  glmer(recall_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recollect == "Detected, Not Recollected"),
+        family = binomial) 
+
+# Anova
+Anova(recall_corrections_cond_2_glmer)
+
+# Pairwise Comparisons
+(recall_corrections_cond_2_glmer_emmeans <- 
+  emmeans(recall_corrections_cond_2_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recall_corrections_cond_2_glmer_emmeans_df <- 
+  as_tibble(recall_corrections_cond_2_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Detected, Not Recollected", experiment = "Experiment 2"))
+```
+
+## Model conditional real news recall for corrections in experiment 2 (Not Detected & Fake News Recalled) 
+```{r}
+# Fit model
+recall_corrections_cond_3_glmer <- 
+  glmer(recall_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recollect == "Not Detected, Recollected"),
+        family = binomial) 
+
+# Anova
+Anova(recall_corrections_cond_3_glmer)
+
+# Pairwise Comparisons
+(recall_corrections_cond_3_glmer_emmeans <- 
+  emmeans(recall_corrections_cond_3_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recall_corrections_cond_3_glmer_emmeans_df <- 
+  as_tibble(recall_corrections_cond_3_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Not Detected, Recollected", experiment = "Experiment 2"))
+```
+
+## Model conditional real news recall for corrections in experiment 2 (Not Detected & Fake News Not Recalled) 
+```{r}
+# Fit model
+recall_corrections_cond_4_glmer <- 
+  glmer(recall_1_correct ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recollect == "Not Detected, Not Recollected"),
+        family = binomial) 
+
+# Anova
+Anova(recall_corrections_cond_4_glmer)
+
+# Pairwise Comparisons
+(recall_corrections_cond_4_glmer_emmeans <- 
+  emmeans(recall_corrections_cond_4_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(recall_corrections_cond_4_glmer_emmeans_df <- 
+  as_tibble(recall_corrections_cond_4_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recollect = "Not Detected, Not Recollected", experiment = "Experiment 2"))
+```
+
+## Combine data frames with corrct recall of real news conditionals for visualization
+```{r}
+# Combine data frames with conditionals
+(recall_corrections_cond_glmer_df <- 
+  bind_rows(recall_corrections_cond_1_glmer_emmeans_df,
+            recall_corrections_cond_2_glmer_emmeans_df,
+            recall_corrections_cond_3_glmer_emmeans_df,
+            recall_corrections_cond_4_glmer_emmeans_df) %>% 
+  select(-SE, -df))
+
+# Compute cell counts
+(recall_corrections_cond_count_df <- 
+  e2_cor_df %>% 
+  group_by(age_group, statementtype, correction_detect_recollect) %>% 
+  summarise(obs = n()) %>%
+  ungroup() %>%
+  group_by(age_group) %>% 
+  mutate(obs_prop = prop.table(obs)))
+
+# Join data frames
+(recall_corrections_cond_cond_df <- 
+  full_join(recall_corrections_cond_glmer_df, recall_corrections_cond_count_df) %>%
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(detect = ifelse(correction_detect_recollect == "Detected, Recollected" | correction_detect_recollect == "Detected, Not Recollected", "Correction Detected", "Correction Not Detected")) %>% 
+  mutate(remember = ifelse(correction_detect_recollect == "Detected, Recollected" | correction_detect_recollect == "Not Detected, Recollected", "Fake News Recalled", "Fake News Not Recalled")) %>%   
+  select(statementtype, age_group, obs, obs_prop, everything()))
+```
+
+## visualize conditional correct real new recall: experiment 2
+```{r fig.height=6, fig.width=6}
+# Re-order factor levels
+recall_corrections_cond_cond_df$age_group %<>% factor(levels = c("Younger", "Older"))
+recall_corrections_cond_cond_df$statementtype %<>% factor(levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+recall_corrections_cond_cond_df$detect %<>% factor(levels = c("Correction Detected", "Correction Not Detected"))
+recall_corrections_cond_cond_df$remember %<>% factor(levels = c("Fake News Recalled", "Fake News Not Recalled"))
+
+# Plot
+recall_corrections_cond_p <- 
+  recall_corrections_cond_cond_df %>% 
+  ggplot(aes(x = age_group, y = prob, fill = statementtype)) +
+  facet_grid(remember ~ detect) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs), position = position_dodge(width = .5), stroke = .3, shape = 21) +
+  scale_fill_manual(values = c("One Fake News Exposure" = one_fill, "Three Fake News Exposures" = three_fill)) +
+  scale_y_continuous(expand = c(0.025, 0.025), limits = c(0, 1), breaks = seq(0, 1, .1)) +
+  scale_size_area(max_size = 7) +
+  xlab("Age Group") +
+  ylab("Correct Recall of Real News") +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  theme(legend.position = c(.22, .58),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+recall_corrections_cond_p
+```
+
+## Model conditional intrusions of fake news for corrections in experiment 2 (All) 
+```{r}
+# Fit model
+recall_fake_intrus_cond_glmer <- 
+  glmer(recall_1_misinfo ~ age_group * detection_p2 * correction_resp_p3 * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = e2_cor_df,
+        family = binomial,
+        control = moreControl) 
+
+# Anova
+Anova(recall_fake_intrus_cond_glmer)
+
+# Pairwise Comparisons
+(recall_fake_intrus_cond_glmer_emmeans <- 
+  emmeans(recall_fake_intrus_cond_glmer, list(
+    pairwise ~ detection_p2,
+    pairwise ~ correction_resp_p3,
+    pairwise ~ statementtype,
+    pairwise ~ detection_p2 | correction_resp_p3,
+    pairwise ~ correction_resp_p3 | statementtype),
+    type = "response"))
+```
+
+## Model conditional intrusions of fake news for corrections in experiment 2 (Detected & Corrections Remembered) 
+```{r}
+# Fit model
+fake_intrus_corrections_cond_1_glmer <- 
+  glmer(recall_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recognize2 == "Detected, Recognized"),
+        family = binomial) 
+
+# Anova
+Anova(fake_intrus_corrections_cond_1_glmer)
+
+# Pairwise Comparisons
+(fake_intrus_corrections_cond_1_glmer_emmeans <- 
+  emmeans(fake_intrus_corrections_cond_1_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(fake_intrus_corrections_cond_1_glmer_emmeans_df <- 
+  as_tibble(fake_intrus_corrections_cond_1_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize2 = "Detected, Recognized", experiment = "Experiment 2"))
+```
+
+## Model conditional intrusions of fake news for corrections in experiment 2 (Detected & Corrections Not Remembered) 
+```{r}
+# Fit model
+fake_intrus_corrections_cond_2_glmer <- 
+  glmer(recall_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recognize2 == "Detected, Not Recognized"),
+        family = binomial) 
+
+# Anova
+Anova(fake_intrus_corrections_cond_2_glmer)
+
+# Pairwise Comparisons
+(fake_intrus_corrections_cond_2_glmer_emmeans <- 
+  emmeans(fake_intrus_corrections_cond_2_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(fake_intrus_corrections_cond_2_glmer_emmeans_df <- 
+  as_tibble(fake_intrus_corrections_cond_2_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize2 = "Detected, Not Recognized", experiment = "Experiment 2"))
+```
+
+## Model conditional intrusions of fake news for corrections in experiment 2 (Not Detected & Corrections Remembered) 
+```{r}
+# Fit model
+fake_intrus_corrections_cond_3_glmer <- 
+  glmer(recall_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recognize2 == "Not Detected, Recognized"),
+        family = binomial) 
+
+# Anova
+Anova(fake_intrus_corrections_cond_3_glmer)
+
+# Pairwise Comparisons
+(fake_intrus_corrections_cond_3_glmer_emmeans <- 
+  emmeans(fake_intrus_corrections_cond_3_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(fake_intrus_corrections_cond_3_glmer_emmeans_df <- 
+  as_tibble(fake_intrus_corrections_cond_3_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize2 = "Not Detected, Recognized", experiment = "Experiment 2"))
+```
+
+## Model conditional intrusions of fake news for corrections in experiment 2 (Not Detected & Corrections Not Remembered) 
+```{r}
+# Fit model
+fake_intrus_corrections_cond_4_glmer <- 
+  glmer(recall_1_misinfo ~ age_group * statementtype + time_delay + 
+          (1 | subject) + (1 | topic),
+        data = subset(e2_cor_df, correction_detect_recognize2 == "Not Detected, Not Recognized"),
+        family = binomial) 
+
+# Anova
+Anova(fake_intrus_corrections_cond_4_glmer)
+
+# Pairwise Comparisons
+(fake_intrus_corrections_cond_4_glmer_emmeans <- 
+  emmeans(fake_intrus_corrections_cond_4_glmer, list(
+    pairwise ~ age_group,
+    pairwise ~ statementtype,
+    pairwise ~ statementtype | age_group),
+    type = "response"))
+
+# Extract Estimated Probabilities
+(fake_intrus_corrections_cond_4_glmer_emmeans_df <- 
+  as_tibble(fake_intrus_corrections_cond_4_glmer_emmeans$`emmeans of statementtype | age_group`) %>% 
+    mutate(correction_detect_recognize2 = "Not Detected, Not Recognized", experiment = "Experiment 2"))
+```
+
+## Combine data frames with false recall of fake news conditionals for visualization
+```{r}
+# Combine data frames with conditionals
+(fake_intrus_corrections_cond_glmer_emmeans_df <- 
+  bind_rows(fake_intrus_corrections_cond_1_glmer_emmeans_df,
+            fake_intrus_corrections_cond_2_glmer_emmeans_df,
+            fake_intrus_corrections_cond_3_glmer_emmeans_df,
+            fake_intrus_corrections_cond_4_glmer_emmeans_df) %>% 
+  select(-SE, -df))
+
+# Compute cell counts
+(fake_intrus_corrections_cond_count_df <- 
+  e2_cor_df %>% 
+  group_by(age_group, statementtype, correction_detect_recognize2) %>% 
+  summarise(obs = n()) %>%
+  ungroup() %>%
+  group_by(age_group) %>% 
+  mutate(obs_prop = prop.table(obs)))
+
+# Join data frames
+(fake_intrus_corrections_cond_df <- 
+  full_join(fake_intrus_corrections_cond_glmer_emmeans_df, fake_intrus_corrections_cond_count_df) %>%
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(detect = ifelse(correction_detect_recognize2 == "Detected, Recognized" | correction_detect_recognize2 == "Detected, Not Recognized", "Correction Detected", "Correction Not Detected")) %>% 
+  mutate(remember = ifelse(correction_detect_recognize2 == "Detected, Recognized" | correction_detect_recognize2 == "Not Detected, Recognized", "Correction Remembered", "Correction Not Remembered")) %>%   
+  select(statementtype, age_group, obs, obs_prop, everything()))
+```
+
+## visualize conditional intrusions of fake news: experiment 2
+```{r fig.height=6, fig.width=6}
+# Re-order factor levels
+fake_intrus_corrections_cond_df$age_group %<>% factor(levels = c("Younger", "Older"))
+fake_intrus_corrections_cond_df$statementtype %<>% factor(levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+fake_intrus_corrections_cond_df$detect %<>% factor(levels = c("Correction Detected", "Correction Not Detected"))
+fake_intrus_corrections_cond_df$remember %<>% factor(levels = c("Correction Remembered", "Correction Not Remembered"))
+
+# Plot
+fake_intrus_corrections_cond_p <- 
+  fake_intrus_corrections_cond_df %>% 
+  ggplot(aes(x = age_group, y = prob, fill = statementtype)) +
+  facet_grid(remember ~ detect) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs), position = position_dodge(width = .5), stroke = .3, shape = 21) +
+  scale_fill_manual(values = c("One Fake News Exposure" = one_fill, "Three Fake News Exposures" = three_fill)) +
+  scale_y_continuous(expand = c(0.025, 0.025), limits = c(0, 1), breaks = seq(0, 1, .1)) +
+  scale_size_area(max_size = 7) +
+  xlab("Age Group") +
+  ylab("Intrusions of Fake News") +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  theme(legend.position = c(.22, .925),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+fake_intrus_corrections_cond_p
+```
+
+## Combine conditional plots
+```{r fig.height=12.5, fig.width=12.5}
+(cond_plots_p <- 
+   (recog_corrections_cond_p + recog_intrusions_cond_p) /
+   (recall_corrections_cond_p + fake_intrus_corrections_cond_p) + 
+   plot_layout(width = 12.5, height = 12.5) + 
+   plot_annotation(tag_levels = 'A'))
+
+ggsave("../Figures/Fig4.pdf", plot = cond_plots_p, width = 12.5, height = 12.5, units = "in", dpi = 600)
+```
+
+
+## Variables for belief accuracy in phase 3
+```{r}
+# create variable for memory response type for belief ratings
+e1_cor_df$memory_classification <- 
+  ifelse(e1_cor_df$recog_1_correct == "1", "real news correct",
+  ifelse(e1_cor_df$recog_1_misinfo == "1", "fake news intrusion",
+  ifelse(e1_cor_df$recog_1_other == "1", "other", "0")))
+
+e2_cor_df$memory_classification <- 
+  ifelse(e2_cor_df$recall_1_correct == "1", "real news correct",
+  ifelse(e2_cor_df$recall_1_misinfo == "1", "fake news intrusion",
+  ifelse(e2_cor_df$recall_1_other == "1", "other", "0")))
+
+## belief data frame
+bel_e1_df <- e1_cor_df %>% 
+  select(subject, topic, statementtype, age_group, memory_classification, make_base_beliefs, make_test_beliefs)
+
+bel_e2_df <- e2_cor_df %>% 
+  select(subject, topic, statementtype, age_group, memory_classification, make_base_beliefs, make_test_beliefs)
+```
+
+## Model beliefs accuracy in phase 3 in experiment 1
+```{r}
+# Experiment 1
+# Fit model
+belief_e1_lmer <- lmer(make_test_beliefs ~ age_group * statementtype * memory_classification + 
+                              (1 | subject) + (1 | topic),
+                            data = subset(bel_e1_df,  memory_classification != c("other")))
+
+# Anova
+Anova(belief_e1_lmer)
+
+# Pairwise Comparisons
+(belief_e1_lmer_emmeans <- emmeans(belief_e1_lmer, 
+                                           list(pairwise ~ age_group,
+                                             pairwise ~ statementtype, 
+                                             pairwise ~ memory_classification,
+                                             pairwise ~ age_group | statementtype,
+                                             pairwise ~ age_group | memory_classification,
+                                             pairwise ~ statementtype | memory_classification,
+                                             pairwise ~ age_group | statementtype | memory_classification), type = "response"))
+
+# Extract Estimated Probabilities
+(belief_e1_lmer_emmeans_df <- as_tibble(belief_e1_lmer_emmeans$`emmeans of age_group | statementtype, memory_classification`))
+
+# Change Factor Labels
+belief_e1_lmer_emmeans_df <- belief_e1_lmer_emmeans_df %>%  
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(memory_classification = ifelse(memory_classification == "real news correct", "Correct Recognition of Real News", "False Recognition of Fake News"))
+```
+
+## Figure 5: panel A Visualize beliefs accuracy in phase 3 (experiment 1)
+```{r, echo=FALSE, fig.height=4, fig.width=4}
+# Re-order factor levels
+belief_e1_lmer_emmeans_df$age_group <- 
+  factor(belief_e1_lmer_emmeans_df$age_group, levels = c("Younger", "Older"))
+
+belief_e1_lmer_emmeans_df$statementtype <- 
+  factor(belief_e1_lmer_emmeans_df$statementtype, levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+
+belief_e1_lmer_emmeans_df$memory_classification <- 
+  factor(belief_e1_lmer_emmeans_df$memory_classification, levels = c("Correct Recognition of Real News", "False Recognition of Fake News"))
+
+# Legend text
+fig5a_p_text <- 
+  data.frame(
+    memory_classification = c("Correct Recognition of Real News", "False Recognition of Fake News"),
+    statementtype = c("One Fake News Exposure", "Three Fake News Exposures"),
+    x_pos = c(0.6, 0.6),
+    y_pos = c(5.20, 3.65))
+
+# plot
+fig5a_p <- 
+  belief_e1_lmer_emmeans_df %>% 
+  ggplot(aes(x = age_group, y = emmean, fill = memory_classification, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(shape=statementtype, fill = memory_classification), position = position_dodge(width = .5), stroke = .3, size = 4) +
+  scale_y_continuous(limits = c(3.0, 5.5), breaks = seq(3.0, 5.5, 0.5)) +
+  scale_size_area(max_size = 7) +
+  scale_fill_manual(values = c("Correct Recognition of Real News" = "#2c7bb6", "False Recognition of Fake News" = "#F85A3E")) +
+  scale_shape_manual(values=c(21, 24))+
+  geom_text(data = fig5a_p_text, aes(x = x_pos, y = y_pos, label = memory_classification), 
+            hjust = 0, size = 4, color = c("#2c7bb6", "#F85A3E")) +
+  scale_x_discrete(labels = c("Younger", "Older")) +
+  labs(title = "Experiment 1",y = "Accuracy Rating", x = "Age Group") +
+  guides(size = "none", fill =FALSE) +
+  theme(legend.position = c(.32, .10),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+fig5a_p
+```
+
+## Model beliefs accuracy in phase 3 in experiment 2
+```{r}
+# Experiment 1
+# Fit model
+belief_e2_lmer <- lmer(make_test_beliefs ~ age_group * statementtype * memory_classification + 
+                              (1 | subject) + (1 | topic),
+                            data = subset(bel_e2_df,  memory_classification != c("other")))
+
+# Anova
+Anova(belief_e2_lmer)
+
+# Pairwise Comparisons
+(belief_e2_lmer_emmeans <- emmeans(belief_e2_lmer, 
+                                           list(pairwise ~ age_group,
+                                             pairwise ~ statementtype, 
+                                             pairwise ~ memory_classification,
+                                             pairwise ~ age_group | statementtype,
+                                             pairwise ~ age_group | memory_classification,
+                                             pairwise ~ statementtype | memory_classification,
+                                             pairwise ~ age_group | statementtype | memory_classification), type = "response"))
+
+# Extract Estimated Probabilities
+(belief_e2_lmer_emmeans_df <- as_tibble(belief_e2_lmer_emmeans$`emmeans of age_group | statementtype, memory_classification`))
+
+# Change Factor Labels
+belief_e2_lmer_emmeans_df <- belief_e2_lmer_emmeans_df %>%  
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(memory_classification = ifelse(memory_classification == "real news correct", "Correct Recall of Real News", "Intrusions of Fake News"))
+```
+
+
+
+
+
+## Figure 5: panel B Visualize beliefs accuracy in phase 3 in (experiment 2)
+```{r, echo=FALSE, fig.height=4, fig.width=4}
+# Re-order factor levels
+belief_e2_lmer_emmeans_df$age_group <- 
+  factor(belief_e2_lmer_emmeans_df$age_group, levels = c("Younger", "Older"))
+
+belief_e2_lmer_emmeans_df$statementtype <- 
+  factor(belief_e2_lmer_emmeans_df$statementtype, levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+
+belief_e2_lmer_emmeans_df$memory_classification <- 
+  factor(belief_e2_lmer_emmeans_df$memory_classification, levels = c("Correct Recall of Real News", "Intrusions of Fake News"))
+
+# Legend text
+fig5b_p_text <- 
+  data.frame(
+    memory_classification = c("Correct Recall of Real News", "Intrusions of Fake News"),
+    statementtype = c("One Fake News Exposure", "Three Fake News Exposures"),
+    x_pos = c(0.6, 0.6),
+    y_pos = c(5.20, 3.68))
+
+# plot
+fig5b_p <- 
+  belief_e2_lmer_emmeans_df %>% 
+  ggplot(aes(x = age_group, y = emmean, fill = memory_classification, group = statementtype)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .5), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(shape=statementtype, fill = memory_classification), position = position_dodge(width = .5), stroke = .3, size = 4) +
+  scale_y_continuous(limits = c(3.0, 5.5), breaks = seq(3.0, 5.5, 0.5)) +
+  scale_size_area(max_size = 7) +
+  scale_fill_manual(values = c("Correct Recall of Real News" = "#2c7bb6", "Intrusions of Fake News" = "#F85A3E")) +
+  scale_shape_manual(values=c(21, 24))+
+  geom_text(data = fig5b_p_text, aes(x = x_pos, y = y_pos, label = memory_classification), 
+            hjust = 0, size = 4, color = c("#2c7bb6", "#F85A3E")) +
+  scale_x_discrete(labels = c("Younger", "Older")) +
+  labs(title = "Experiment 2",y = "Accuracy Rating", x = "Age Group") +
+  guides(size = "none", fill =FALSE) +
+  theme(legend.position = c(.32, .10),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+fig5b_p
+```
+## Figure 5: Combined belief phase 3 plots
+```{r fig.width=8, fig.height=4}
+(fig5_p <- 
+   (fig5a_p) + (fig5b_p) +
+   plot_layout(width = 8, height = 4))
+
+ggsave("../Figures/fig5.pdf", plot = fig5_p, width = 8, height = 4, units = "in", dpi = 600)
+```
+
+## Model belief rating for correct real news recall conditionalized on correction classification in experiment 1
+```{r }
+# Data frames with only real news recall
+correction_real_recog_only_e1_df <- e1_cor_df %>% filter(memory_classification == "real news correct")
+
+## Experiment 1 ##
+
+# Model specification
+belief_correct_cond_lmer_e1 <- lmer(make_test_beliefs ~ age_group * statementtype * misinfo_recog + 
+                                (1 | subject) + (1 | topic), 
+                              data = correction_real_recog_only_e1_df)
+
+# Wald's test
+Anova(belief_correct_cond_lmer_e1)
+
+# Pairwise comparisons 
+(belief_correct_cond_lmer_e1_emmeans <- emmeans(belief_correct_cond_lmer_e1, 
+                                        list(pairwise ~ age_group, 
+                                             pairwise ~ statementtype, 
+                                             pairwise ~ misinfo_recog,
+                                             pairwise ~ age_group | statementtype,
+                                             pairwise ~ age_group | misinfo_recog,
+                                             pairwise ~ misinfo_recog | age_group,
+                                             pairwise ~ statementtype | misinfo_recog,
+                                             pairwise ~ age_group | statementtype | misinfo_recog), type = "response"))
+
+# Extract estimated probabilities
+(belief_correct_cond_lmer_e1_emmeans_df <- as_tibble(belief_correct_cond_lmer_e1_emmeans$`emmeans of age_group | statementtype, misinfo_recog`))
+```
+
+## Create data frame to visualize belief ratings for real news recognition conditionalized on correction classification in Experiment 1
+```{r}
+# Compute counts and proportions
+(point_size_belief_correct_cnd_e1_df <- 
+  e1_cor_df %>%
+  group_by(age_group, statementtype, memory_classification, misinfo_recog) %>% 
+  summarise(n = length(make_test_beliefs)) %>%
+  mutate(obs = n / 3060) %>% 
+  filter(memory_classification == "real news correct"))
+
+# Combine point size with estimate data frames for real news recall
+(belief_correct_cnd_e1_df_p <- 
+  left_join(belief_correct_cond_lmer_e1_emmeans_df, point_size_belief_correct_cnd_e1_df) %>%
+  select(age_group, statementtype, misinfo_recog, n, obs, everything()) %>% 
+  select(-c(SE, df)))
+
+# Change Factor Labels
+  belief_correct_cnd_e1_df_p <- belief_correct_cnd_e1_df_p %>%  
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(memory_classification = ifelse(memory_classification == "real news correct", "Correct Recognition of Real News", "False Recognition of Fake News")) %>%
+    mutate(misinfo_recog = ifelse(misinfo_recog == "Recollected", "Recognized", "Not Recognized")) 
+
+# Re-order factor levels
+belief_correct_cnd_e1_df_p$age_group <- 
+  factor(belief_correct_cnd_e1_df_p$age_group, levels = c("Younger", "Older"))
+
+belief_correct_cnd_e1_df_p$statementtype <- 
+  factor(belief_correct_cnd_e1_df_p$statementtype, levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+
+belief_correct_cnd_e1_df_p$misinfo_recog <- 
+  factor(belief_correct_cnd_e1_df_p$misinfo_recog, levels = c("Recognized", "Not Recognized"))
+```
+
+## Model belief rating for false recognition of fake news conditionalized on correction classification (experiment 1)
+```{r }
+# Data frames with only remembered and not remembered
+false_recog_only_e1_df <- e1_cor_df %>% filter(memory_classification == "fake news intrusion", cor_misinfo_recog != "Recollected") %>% droplevels()
+
+## Experiment 1 ##
+
+# Model specification
+belief_false_recog_cond_lmer_e1 <- lmer(make_test_beliefs ~ age_group * statementtype * cor_misinfo_recog +
+                                (1 | subject) + (1 | topic), 
+                              data = false_recog_only_e1_df)
+
+# Wald's test
+Anova(belief_false_recog_cond_lmer_e1)
+
+# Pairwise comparisons 
+(belief_false_recog_cond_lmer_e1_emmeans <- emmeans(belief_false_recog_cond_lmer_e1, 
+                                        list(pairwise ~ age_group, 
+                                             pairwise ~ statementtype, 
+                                             pairwise ~ cor_misinfo_recog,
+                                             pairwise ~ age_group | statementtype,
+                                             pairwise ~ statementtype | cor_misinfo_recog,
+                                             pairwise ~ cor_misinfo_recog | statementtype,
+                                             pairwise ~ age_group | statementtype | cor_misinfo_recog), type = "response"))
+
+# Extract estimated probabilities
+(belief_false_recog_cond_lmer_e1_emmeans_df <- as_tibble(belief_false_recog_cond_lmer_e1_emmeans$`emmeans of age_group | statementtype, cor_misinfo_recog`))
+```
+
+## Create data frame to visualize belief ratings for fake news recognition conditionalized on correction classification in Experiment 1
+```{r}
+# Compute counts and proportions
+(point_size_belief_false_recog_cnd_e1_df <- 
+  e1_cor_df %>%
+  group_by(age_group, statementtype, memory_classification, cor_misinfo_recog) %>% 
+  summarise(n = length(make_test_beliefs)) %>%
+  mutate(obs = n / 3060) %>% 
+  filter(memory_classification == "fake news intrusion", cor_misinfo_recog != "Recollected")) 
+  
+# Combine point size with estimate data frames for only remembered and not remembered
+(belief_false_recog_cnd_e1_df_p <- 
+  left_join(belief_false_recog_cond_lmer_e1_emmeans_df, point_size_belief_false_recog_cnd_e1_df) %>%
+  select(age_group, statementtype, n, obs, everything()) %>% 
+  select(-c(SE, df)))
+
+# Change Factor Labels
+belief_false_recog_cnd_e1_df_p <- belief_false_recog_cnd_e1_df_p %>%  
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(memory_classification = ifelse(memory_classification == "real news correct", "Correct Recognition of Real News", "False Recognition of Fake News")) %>% 
+  mutate(cor_misinfo_recog = ifelse(cor_misinfo_recog == "Remembered", "Correction Remembered", "Correction Not Remembered")) %>%
+  rename(asymp.LCL = lower.CL,
+         asymp.UCL = upper.CL,
+         misinfo_recog = cor_misinfo_recog)
+
+# Re-order factor levels
+belief_false_recog_cnd_e1_df_p$age_group <- 
+  factor(belief_false_recog_cnd_e1_df_p$age_group, levels = c("Younger", "Older"))
+
+belief_false_recog_cnd_e1_df_p$statementtype <- 
+  factor(belief_false_recog_cnd_e1_df_p$statementtype, levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+```
+
+
+
+## Organizing data frame for vizualization of fact recall accuracy
+```{r Organizing data frame for vizualization of fact recall accuracy}
+# Data frame
+all_belief_cnd_e1_df <- bind_rows(belief_correct_cnd_e1_df_p, belief_false_recog_cnd_e1_df_p)
+all_belief_cnd_e1_df$misinfo_recog <- 
+  factor(all_belief_cnd_e1_df$misinfo_recog, levels = c("Recognized", "Not Recognized", "Correction Remembered", "Correction Not Remembered"))
+# cell placement
+all_belief_cnd_e1_df$x_pnt_pos <- 
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Younger" &
+         all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Recognized", 0.20,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Younger" & 
+         all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Not Recognized", 0.40,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Older" &
+         all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Recognized", 0.80,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Older" &                all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Not Recognized", 1.00,
+
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Younger" &              all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Recognized", 2.00,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Younger" &
+         all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Not Recognized", 2.20,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Older" &
+         all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Recognized", 2.60,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "Correct Recognition of Real News" & all_belief_cnd_e1_df$age_group == "Older" & 
+         all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Not Recognized", 2.80,
+         
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Younger" &
+         all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Correction Remembered", 0.20,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Younger" & 
+         all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Correction Not Remembered", 0.40,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Older" &
+         all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Correction Remembered", 0.80,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Older" &                  all_belief_cnd_e1_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e1_df$misinfo_recog == "Correction Not Remembered", 1.00,
+
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Younger" &                all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Correction Remembered", 2.00,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Younger" &
+         all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Correction Not Remembered", 2.20,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Older" &
+         all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Correction Remembered", 2.60,
+  ifelse(all_belief_cnd_e1_df$memory_classification == "False Recognition of Fake News" & all_belief_cnd_e1_df$age_group == "Older" & 
+         all_belief_cnd_e1_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e1_df$misinfo_recog == "Correction Not Remembered", 2.80, "")
+                  %>% as.numeric())))))))))))))))
+
+# Legend text
+fig6a_p_text <- 
+  data.frame(
+    memory_classification = c("Correct Recognition of Real News", "Correct Recognition of Real News", 
+                              "False Recognition of Fake News", "False Recognition of Fake News"),
+    age_group = c("Younger", "Older",
+                      "Younger", "Older"),
+    misinfo_recog = c("Fake News Recognized", "Fake News Not Recognized",
+                      "Correction Remembered", "Correction Not Remembered"),
+    x_pos = c(0.6, 0.6, 0.6, 0.6),
+    y_pos = c(5.20, 3.97, 3.19, 4.52))
+```
+
+## Figure 6: panel A Conditional recognition beliefs (experiment 1)
+```{r fig.height=4, fig.width=8}
+# Plot
+fig6a_p <-
+  all_belief_cnd_e1_df %>% 
+  ggplot(aes(x = x_pnt_pos, y = emmean, group = interaction(misinfo_recog, age_group))) +
+  facet_grid(. ~ memory_classification) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), position = position_dodge(width = .75), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs, shape=age_group, fill = misinfo_recog), stroke = .3, size = 4)+
+  scale_fill_manual(values = c("Recognized" = "#008837", "Not Recognized" = "#7b3294", 
+                               "Correction Remembered" = "#008837", "Correction Not Remembered" = "#7b3294")) +
+  scale_size_area(max_size = 7) +
+  scale_shape_manual(values=c(21, 24))+
+    geom_text(data = fig6a_p_text, aes(x = x_pos, y = y_pos, label = misinfo_recog),
+            hjust = 0, size = 4, color = c("#008837", "#7b3294", "#008837", "#7b3294")) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(3.00, 5.5), breaks = seq(3.0, 5.5, 0.5)) +
+  scale_x_continuous(breaks= c(.7, 2.5), limits = c(.0, 3.2), 
+                     labels=c("One Fake News\nExposure", "Three Fake News\nExposures"))+
+  labs(title = "Experiment 1", y = "Accuracy Rating", x = "Headline Type") +
+  guides(size = "none", fill =FALSE) +
+  theme(legend.position = c(.08, .12),
+        legend.key.size = unit(.6, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+fig6a_p
+
+```
+
+
+
+## Model belief rating for correct real news recall conditionalized on correction classification in experiment 2
+```{r}
+# Data frames with only real news recall
+correction_real_recall_only_e2_df <- e2_cor_df %>% filter(memory_classification == "real news correct")
+
+## Experiment 2 ##
+
+# Model specification
+belief_correct_cond_lmer_e2 <- lmer(make_test_beliefs ~ age_group * statementtype * misinfo_recall + 
+                                (1 | subject) + (1 | topic), 
+                              data = correction_real_recall_only_e2_df)
+
+# Wald's test
+Anova(belief_correct_cond_lmer_e2)
+
+# Pairwise comparisons 
+(belief_correct_cond_lmer_e2_emmeans <- emmeans(belief_correct_cond_lmer_e2, 
+                                        list(pairwise ~ age_group, 
+                                             pairwise ~ statementtype, 
+                                             pairwise ~ misinfo_recall,
+                                             pairwise ~ age_group | statementtype,
+                                             pairwise ~ age_group | misinfo_recall,
+                                             pairwise ~ statementtype | misinfo_recall,
+                                             pairwise ~ age_group | statementtype | misinfo_recall), type = "response"))
+
+# Extract estimated probabilities
+(belief_correct_cond_lmer_e2_emmeans_df <- as_tibble(belief_correct_cond_lmer_e2_emmeans$`emmeans of age_group | statementtype, misinfo_recall`))
+```
+## Create data frame to visualize belief ratings for real news recall conditionalized on correction classification in Experiment 2
+```{r}
+# Compute counts and proportions
+(point_size_belief_correct_cnd_e2_df <- 
+  e2_cor_df %>%
+  group_by(age_group, statementtype, memory_classification, misinfo_recall) %>% 
+  summarise(n = length(make_test_beliefs)) %>%
+  mutate(obs = n / 3060) %>% 
+  filter(memory_classification == "real news correct"))
+
+# Combine point size with estimate data frames for real news recall
+(belief_correct_cnd_e2_df_p <- 
+  left_join(belief_correct_cond_lmer_e2_emmeans_df, point_size_belief_correct_cnd_e2_df) %>%
+  select(age_group, statementtype, misinfo_recall, n, obs, everything()) %>% 
+  select(-c(SE, df)))
+
+# Change Factor Labels
+  belief_correct_cnd_e2_df_p <- belief_correct_cnd_e2_df_p %>%  
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(memory_classification = ifelse(memory_classification == "real news correct", "Correct Recall of Real News", "Intrusions of Fake News")) 
+
+# Re-order factor levels
+belief_correct_cnd_e2_df_p$age_group <- 
+  factor(belief_correct_cnd_e2_df_p$age_group, levels = c("Younger", "Older"))
+
+belief_correct_cnd_e2_df_p$statementtype <- 
+  factor(belief_correct_cnd_e2_df_p$statementtype, levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+
+belief_correct_cnd_e2_df_p$misinfo_recall <- 
+  factor(belief_correct_cnd_e2_df_p$misinfo_recall, levels = c("Recollected", "Not Recollected"))
+```
+
+## Model belief rating for intrusions of fake news conditionalized on correction classification (experiment 2)
+```{r }
+# Data frames with only fake news intrusions
+false_intru_only_e2_df <- e2_cor_df %>% filter(memory_classification == "fake news intrusion", cor_misinfo_recall != "Recollected") %>% droplevels()
+
+## Experiment 2 ##
+
+# Model specification
+belief_intru_cond_lmer_e2 <- lmer(make_test_beliefs ~ age_group * statementtype * cor_misinfo_recall +
+                                (1 | subject) + (1 | topic), 
+                              data = false_intru_only_e2_df)
+
+# Wald's test
+Anova(belief_intru_cond_lmer_e2)
+
+# Pairwise comparisons 
+(belief_intru_cond_lmer_e2_emmeans <- emmeans(belief_intru_cond_lmer_e2, 
+                                        list(pairwise ~ age_group, 
+                                             pairwise ~ statementtype, 
+                                             pairwise ~ cor_misinfo_recall, 
+                                             pairwise ~ age_group | statementtype,
+                                             pairwise ~ age_group | cor_misinfo_recall,
+                                             pairwise ~ cor_misinfo_recall | age_group,
+                                             pairwise ~ age_group | statementtype | cor_misinfo_recall), type = "response"))
+
+# Extract estimated probabilities
+(belief_intru_cond_lmer_e2_emmeans_df <- as_tibble(belief_intru_cond_lmer_e2_emmeans$`emmeans of age_group | statementtype, cor_misinfo_recall`))
+```
+
+## Create data frame to visualize belief ratings for fake news recognition conditionalized on correction classification in Experiment 2
+```{r}
+# Compute counts and proportions
+(point_size_belief_intru_cnd_e2_df <- 
+  e2_cor_df %>%
+  group_by(age_group, statementtype, memory_classification, cor_misinfo_recall) %>% 
+  summarise(n = length(make_test_beliefs)) %>%
+  mutate(obs = n / 3060) %>% 
+  filter(memory_classification == "fake news intrusion", cor_misinfo_recall != "Recollected")) 
+
+# Combine point size with estimate data frames for real news recall
+(belief_intru_cnd_e2_df_p <- 
+  left_join(belief_intru_cond_lmer_e2_emmeans_df, point_size_belief_intru_cnd_e2_df) %>%
+  select(age_group, statementtype, n, obs, everything()) %>% 
+  select(-c(SE, df)))
+
+# Change Factor Labels
+  belief_intru_cnd_e2_df_p <- belief_intru_cnd_e2_df_p %>%  
+  mutate(age_group = ifelse(age_group == "older", "Older", "Younger")) %>% 
+  mutate(statementtype = ifelse(statementtype == "misinformation x 1", "One Fake News Exposure", "Three Fake News Exposures")) %>%
+  mutate(memory_classification = ifelse(memory_classification == "real news correct", "Correct Recall of Real News", "Intrusions of Fake News")) %>% 
+  mutate(cor_misinfo_recall = ifelse(cor_misinfo_recall == "Remembered", "Correction Remembered", "Correction Not Remembered")) %>%
+  rename(misinfo_recall = cor_misinfo_recall)
+
+# Re-order factor levels
+belief_intru_cnd_e2_df_p$age_group <- 
+  factor(belief_intru_cnd_e2_df_p$age_group, levels = c("Younger", "Older"))
+
+belief_intru_cnd_e2_df_p$statementtype <- 
+  factor(belief_intru_cnd_e2_df_p$statementtype, levels = c("One Fake News Exposure", "Three Fake News Exposures"))
+```
+
+```{r Organizing data frame for vizualization of fact recall accuracy}
+# Data frame
+all_belief_cnd_e2_df <- bind_rows(belief_correct_cnd_e2_df_p, belief_intru_cnd_e2_df_p)
+all_belief_cnd_e2_df$misinfo_recall <- 
+  factor(all_belief_cnd_e2_df$misinfo_recall, levels = c("Recollected", "Not Recollected", "Correction Remembered", "Correction Not Remembered"))
+
+# cell placement
+all_belief_cnd_e2_df$x_pnt_pos <- 
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Younger" &
+         all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Recollected", 0.20,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Younger" & 
+         all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Not Recollected", 0.40,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Older" &
+         all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Recollected", 0.80,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Older" &                all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Not Recollected", 1.00,
+
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Younger" &              all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Recollected", 2.20,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Younger" &
+         all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Not Recollected", 2.40,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Older" &
+         all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Recollected", 2.80,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Correct Recall of Real News" & all_belief_cnd_e2_df$age_group == "Older" & 
+         all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Not Recollected", 3.00,
+         
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Younger" &
+  all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Correction Remembered", 0.20,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Younger" & 
+  all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Correction Not Remembered", 0.40,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Older" &
+  all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Correction Remembered", 0.80,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Older" &                  all_belief_cnd_e2_df$statementtype == "One Fake News Exposure" & all_belief_cnd_e2_df$misinfo_recall == "Correction Not Remembered", 1.00,
+
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Younger" &                all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Correction Remembered", 2.20,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Younger" &
+  all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Correction Not Remembered", 2.40,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Older" &
+  all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Correction Remembered", 2.80,
+  ifelse(all_belief_cnd_e2_df$memory_classification == "Intrusions of Fake News" & all_belief_cnd_e2_df$age_group == "Older" & 
+  all_belief_cnd_e2_df$statementtype == "Three Fake News Exposures" & all_belief_cnd_e2_df$misinfo_recall == "Correction Not Remembered", 3.00, "")%>% as.numeric())))))))))))))))
+
+# Legend text
+fig6b_p_text <- 
+  data.frame(
+    memory_classification = c("Correct Recall of Real News", "Correct Recall of Real News", 
+                              "Intrusions of Fake News", "Intrusions of Fake News"),
+    age_group = c("Younger", "Older",
+                      "Younger", "Older"),
+    misinfo_recall = c("Fake News Recollected", "Fake News Not Recollected",
+                      "Correction Remembered", "Correction Not Remembered"),
+    x_pos = c(0.6, 0.6, 0.6, 0.6),
+    y_pos = c(5.32, 4.15, 2.9, 4.74))
+
+
+```
+
+##Figure 6: panel B Conditional recall beliefs (experiment 2)
+```{r fig.height=4, fig.width=8}
+# Plot
+fig6b_p <-
+  all_belief_cnd_e2_df %>% 
+  ggplot(aes(x = x_pnt_pos, y = emmean, group = interaction(misinfo_recall, age_group))) +
+  facet_grid(. ~ memory_classification) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), size = .3, width = 0, show.legend = FALSE) +
+  geom_point(aes(size = obs, shape=age_group, fill = misinfo_recall), stroke = .3, size = 4)+
+  scale_fill_manual(values = c("Recollected" = "#008837", "Not Recollected" = "#7b3294", 
+                               "Correction Remembered" = "#008837", "Correction Not Remembered" = "#7b3294")) +
+  scale_size_area(max_size = 7) +
+  scale_shape_manual(values=c(21, 24))+
+      geom_text(data = fig6b_p_text, aes(x = x_pos, y = y_pos, label = misinfo_recall),
+            hjust = 0, size = 4, color = c("#008837", "#7b3294","#008837", "#7b3294")) +
+  guides(size = "none", fill = guide_legend(override.aes = list(size = 4))) +
+  scale_y_continuous(expand = c(0, 0), limits = c(2.75, 5.75), breaks = seq(3.0, 5.5, 0.5)) +
+  scale_x_continuous(breaks= c(.7, 2.5), limits = c(.0, 3.2), 
+                     labels=c("One Fake News\nExposure", "Three Fake News\nExposures"))+
+  labs(title = "Experiment 2", y = "Accuracy Rating", x = "Headline Type") +
+  guides(size = "none", fill =FALSE) +
+  theme(legend.position = c(.08, .13),
+        legend.key.size = unit(.75, 'cm'),
+        legend.title=element_blank(),
+        legend.text=element_text(size=9),
+        legend.key=element_blank(),
+        legend.margin = margin(0,0,0,0),
+        strip.background=element_blank(),
+        strip.text.x=element_text(size = 12, color = "black", margin = margin(0, 0, 8, 0)),
+        strip.text.y=element_text(size = 12, color = "black", margin = margin(0, 0, 0, 8)),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_line(size = .3,color="black"),
+        axis.text.x=element_text(size = 10,color="black"),
+        axis.text.y=element_text(size = 10,color="black"),
+        axis.title.x=element_text(size = 12, margin = margin(8, 0, 0, 0), hjust = .5),
+        axis.title.y=element_text(size = 12, margin = margin(0, 8, 0, 0)),
+        plot.margin = unit(c(.1, .1, .1, .1), "in"),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(-.0005, "in"),
+        panel.border = element_rect(size = .3, fill = NA, color = "black"))
+fig6b_p
+
+##ggsave('../Figures/fig6.pdf', plot = Fig6_p, width = 10, height = 7, units = "in", dpi = 300, device = "pdf")
+
+```
+
+
+## Figure 6: Combined belief conditional plots
+```{r fig.width=7, fig.height=8}
+(fig6_p <- 
+   (fig6a_p) / (fig6b_p) +
+   plot_layout(width = 7, height = 8))
+
+ggsave("../Figures/fig6.pdf", plot = fig6_p, width = 7, height = 8, units = "in", dpi = 600)
+```

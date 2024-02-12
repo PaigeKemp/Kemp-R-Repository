@@ -1,0 +1,421 @@
+---
+title: "2004 Preprocessing"
+author: "Paige Kemp and Chris Wahlheim"
+Date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r clear environment}
+rm(list=ls())
+```
+
+```{r load packages, warning=FALSE}
+# Load packages
+pacman::p_load("tidyverse", "magrittr", "janitor")
+```
+
+```{r read data files}
+## Experiment 1 ##
+exp1_familiarity_df <- read.csv("../Data/Exp1/2004.1_familiarity_data.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+exp1_test_data_df <- read.csv("../Data/Exp1/2004.1_data.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+
+## Experiment 2 ##
+exp2_familiarity_df <- read.csv("../Data/Exp2/2004.2_familiarity_data.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+exp2_test_data_df <- read.csv("../Data/Exp2/2004.2_data.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+```
+
+```{r sample sizes}
+## Experiment 1 ##
+(exp1_familiarity_df %>%
+   group_by(age_group) %>% 
+   mutate(N = n_distinct(subject)) %>%
+   summarise(N = mean(N)))
+
+(exp1_test_data_df %>%
+    group_by(age_group) %>% 
+    mutate(N = n_distinct(subject)) %>%
+    summarise(N = mean(N)))
+
+## Experiment 2 ##
+(exp2_familiarity_df %>%
+   group_by(age_group) %>% 
+   mutate(N = n_distinct(subject)) %>%
+   summarise(N = mean(N)))
+
+(exp2_test_data_df %>%
+    group_by(age_group) %>% 
+    mutate(N = n_distinct(subject)) %>%
+    summarise(N = mean(N)))
+```
+
+```{r clean data frames} 
+## Experiment 1 ##
+
+# convert time_delay variable to numeric
+exp1_test_data_df$time_delay %<>% as.numeric
+exp1_familiarity_df$time_delay %<>% as.numeric
+
+# change variable level names for statement type in all data df
+exp1_test_data_df$statementtype <- 
+  ifelse(exp1_test_data_df$statementtype == "correct_1", "misinformation x 1",
+  ifelse(exp1_test_data_df$statementtype == "correct_3", "misinformation x 3", exp1_test_data_df$statementtype))     
+
+# remove rows with missing observation in Phase 1 belief ratings
+exp1_test_data_df_belief_2 <- 
+  exp1_test_data_df %>% 
+  filter(make_base_beliefs > 0)
+
+# remove rows with missing observation in Phase 1 familiarity data frame
+exp1_familiarity_df %<>% filter(make_fams > 0) 
+
+# change variable level names for statementtype in Phase 1 familiarity data frame
+exp1_familiarity_df$statementtype <- 
+  ifelse(exp1_familiarity_df$statementtype == "Filler", "Fact", "Misinformation")
+
+# add block number to Phase 1 familiarity data frame
+exp1_familiarity_df$block <- 
+  ifelse(exp1_familiarity_df$trial_count <=30, "block 1", "block 2")
+
+## Experiment 2 ##
+
+# convert time_delay variable to numeric
+exp2_test_data_df$time_delay %<>% as.numeric
+exp2_familiarity_df$time_delay %<>% as.numeric
+
+# change variable level names for statement type in all data df
+exp2_test_data_df$statementtype <- 
+  ifelse(exp2_test_data_df$statementtype == "correct_1", "misinformation x 1",
+  ifelse(exp2_test_data_df$statementtype == "correct_3", "misinformation x 3", exp2_test_data_df$statementtype))     
+
+# remove rows with missing observation in Phase 1 belief ratings
+exp2_test_data_df_belief_2 <- 
+  exp2_test_data_df %>% 
+  filter(make_base_beliefs > 0)
+
+# remove rows with missing observation in Phase 1 familiarity data frame
+exp2_familiarity_df %<>% filter(make_fams > 0) 
+
+# change variable level names for statementtype in Phase 1 familiarity data frame
+exp2_familiarity_df$statementtype <- 
+  ifelse(exp2_familiarity_df$statementtype == "Filler", "Fact", "Misinformation")
+
+# add block number to Phase 1 familiarity data frame
+exp2_familiarity_df$block <- 
+  ifelse(exp2_familiarity_df$trial_count <=30, "block 1", "block 2")
+```
+
+```{r add variables for test responses - Experiment 1}
+# Extract last five characters from recognition responses to create response type variables
+exp1_test_data_df$testresponse_type <- str_sub(exp1_test_data_df$testresponse, -5, -1)
+exp1_test_data_df$alternateresponse_type <- str_sub(exp1_test_data_df$alternateresponse, -10, -1)
+
+# Change variable names for test response type
+exp1_test_data_df$testresponse_type <- 
+  ifelse(exp1_test_data_df$testresponse_type == "c.png", "Correct",
+  ifelse(exp1_test_data_df$testresponse_type == "m.png", "Misinformation",      
+  ifelse(exp1_test_data_df$testresponse_type == "o.png", "Other", "")))
+
+exp1_test_data_df$alternateresponse_type <- 
+  ifelse(exp1_test_data_df$alternateresponse_type == "c_test.png", "Correct",
+  ifelse(exp1_test_data_df$alternateresponse_type == "m_test.png", "Misinformation",      
+  ifelse(exp1_test_data_df$alternateresponse_type == "o_test.png", "Other", "")))
+
+# string variable for correction detection in phase 2
+exp1_test_data_df$detection <- 
+  ifelse(exp1_test_data_df$make_detections == 1, "Detected", "Not Detected")
+
+# 1/0 variables for recognition responses on step 1
+exp1_test_data_df$Recog_1_Correct <- 
+  ifelse(exp1_test_data_df$testresponse_type == "Correct", 1, 0)
+
+exp1_test_data_df$Recog_1_Misinfo <- 
+  ifelse(exp1_test_data_df$testresponse_type == "Misinformation", 1, 0)
+
+exp1_test_data_df$Recog_1_Other <- 
+  ifelse(exp1_test_data_df$testresponse_type == "Other", 1, 0)
+
+# 1/0 variable for correction classification response on step 2
+exp1_test_data_df <- 
+  exp1_test_data_df %>% 
+  rename("Correction_2_Resp" = "make_cr_response")
+
+# 1/0 variables for recognition responses on step 3
+exp1_test_data_df$Recog_3_Correct <- 
+  ifelse(exp1_test_data_df$alternateresponse_type == "Correct", 1, 0)
+
+exp1_test_data_df$Recog_3_Misinfo <- 
+  ifelse(exp1_test_data_df$alternateresponse_type == "Misinformation", 1, 0)
+
+exp1_test_data_df$Recog_3_Other <- 
+  ifelse(exp1_test_data_df$alternateresponse_type == "Other", 1, 0)
+
+# change nas to zeros for step 3 recognition judgments
+exp1_test_data_df$Recog_3_Correct <- 
+  exp1_test_data_df$Recog_3_Correct %>% 
+  replace(is.na(.), 0)
+
+exp1_test_data_df$Recog_3_Misinfo <- 
+  exp1_test_data_df$Recog_3_Misinfo %>% 
+  replace(is.na(.), 0)
+
+exp1_test_data_df$Recog_3_Other <- 
+  exp1_test_data_df$Recog_3_Other %>% 
+  replace(is.na(.), 0)
+
+# string variable for correction classification response on step 2
+exp1_test_data_df$Correction_Resp_p3 <- 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 1, "Correction", "Not Correction")
+
+# 1/0 variables for signal detection response categories for correction classifications in phases 2
+exp1_test_data_df$Hit_p2 <- 
+  ifelse(exp1_test_data_df$make_detections == 1 & exp1_test_data_df$statementtype != "repeated", 1, 0)
+
+exp1_test_data_df$Miss_p2 <- 
+  ifelse(exp1_test_data_df$make_detections == 0 & exp1_test_data_df$statementtype != "repeated", 1, 0)
+
+exp1_test_data_df$FA_p2 <- 
+  ifelse(exp1_test_data_df$make_detections == 1 & exp1_test_data_df$statementtype == "repeated", 1, 0)
+
+exp1_test_data_df$CR_p2 <- 
+  ifelse(exp1_test_data_df$make_detections == 0 & exp1_test_data_df$statementtype == "repeated", 1, 0)
+
+# 1/0 variables for signal detection response categories for correction classifications in phases 3
+exp1_test_data_df$Hit_p3 <- 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$statementtype != "repeated", 1, 0)
+
+exp1_test_data_df$Miss_p3 <- 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 0 & exp1_test_data_df$statementtype != "repeated", 1, 0)
+
+exp1_test_data_df$FA_p3 <- 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$statementtype == "repeated", 1, 0)
+
+exp1_test_data_df$CR_p3 <- 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 0 & exp1_test_data_df$statementtype == "repeated", 1, 0)
+
+# string variable for correct misinformation recognition in phase 3
+exp1_test_data_df$Misinfo_Recog <- 
+  ifelse(exp1_test_data_df$Recog_3_Misinfo == 1, "Recollected", "Not Recollected")
+
+exp1_test_data_df$Cor_Misinfo_Recog <- 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$Recog_3_Misinfo == 1, "Recollected", 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$Recog_3_Misinfo == 0, "Remembered", 
+  ifelse(exp1_test_data_df$Correction_2_Resp == 0, "Not Remembered","")))
+
+# string variable for combinations of correction classifications in phases 2 and 3 (with misinformation recollection in phase 3)
+exp1_test_data_df$CorrectionDetectRecollect <- 
+  ifelse(exp1_test_data_df$detection == "Detected" & exp1_test_data_df$Recog_3_Misinfo == 1, "Detected, Recollected",
+  ifelse(exp1_test_data_df$detection == "Detected" & exp1_test_data_df$Recog_3_Misinfo == 0, "Detected, Not Recollected",                    
+  ifelse(exp1_test_data_df$detection == "Not Detected" & exp1_test_data_df$Recog_3_Misinfo == 1, "Not Detected, Recollected",                
+  ifelse(exp1_test_data_df$detection == "Not Detected" & exp1_test_data_df$Recog_3_Misinfo == 0, "Not Detected, Not Recollected",""))))
+
+# string variable for combinations of correction classifications in phases 2 and 3 (with correction recognition in phase 3)
+exp1_test_data_df$CorrectionDetectRecognize <- 
+  ifelse(exp1_test_data_df$detection == "Detected" & exp1_test_data_df$Correction_2_Resp == 1, "Detected, Recognized",
+  ifelse(exp1_test_data_df$detection == "Detected" & exp1_test_data_df$Correction_2_Resp == 0, "Detected, Not Recognized",                   
+  ifelse(exp1_test_data_df$detection == "Not Detected" & exp1_test_data_df$Correction_2_Resp == 1, "Not Detected, Recognized",               
+  ifelse(exp1_test_data_df$detection == "Not Detected" & exp1_test_data_df$Correction_2_Resp == 0, "Not Detected, Not Recognized",""))))
+
+# string variable for combinations of all possible correction classifications in phases 2 and 3
+exp1_test_data_df$Correction_Conditional_All <- 
+  ifelse(exp1_test_data_df$make_detections == 1 & exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$Recog_3_Misinfo == 1, "Detected, Recognized, & Fake News Identified",
+  ifelse(exp1_test_data_df$make_detections == 1 & exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$Recog_3_Misinfo == 0, "Detected, Recognized, & Fake News Not Identified",
+  ifelse(exp1_test_data_df$make_detections == 1 & exp1_test_data_df$Correction_2_Resp == 0 & exp1_test_data_df$Recog_3_Misinfo == 0, "Detected & Not Recognized",
+  ifelse(exp1_test_data_df$make_detections == 0 & exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$Recog_3_Misinfo == 1, "Not Detected, Recognized, & Fake News Identified",
+  ifelse(exp1_test_data_df$make_detections == 0 & exp1_test_data_df$Correction_2_Resp == 1 & exp1_test_data_df$Recog_3_Misinfo == 0, "Not Detected, Recognized, & Fake News Not Identified",
+  ifelse(exp1_test_data_df$make_detections == 0 & exp1_test_data_df$Correction_2_Resp == 0 & exp1_test_data_df$Recog_3_Misinfo == 0, "Not Detected & Not Recognized", ""))))))
+```
+
+```{r add variables for test responses - Experiment 2}
+# string variable for correction detection in phase 2
+exp2_test_data_df$detection <- 
+  ifelse(exp2_test_data_df$make_detections == 1, "Detected", "Not Detected")
+
+# 1/0 variables for recall responses on step 1
+exp2_test_data_df$Recall_1_Correct <- 
+  ifelse(exp2_test_data_df$fact_recall_coding_final == "2", 1, 0)
+
+exp2_test_data_df$Recall_1_Misinfo <- 
+  ifelse(exp2_test_data_df$fact_recall_coding_final == "1", 1, 0)
+
+exp2_test_data_df$Recall_1_Other <- 
+  ifelse(exp2_test_data_df$fact_recall_coding_final == "E" | exp2_test_data_df$fact_recall_coding_final == "A" , 1, 0)
+
+# 1/0 variable for correction classification response on step 2
+exp2_test_data_df <- 
+  exp2_test_data_df %>% rename("Correction_2_Resp" = "make_cr_response")
+
+# 1/0 variables for recall responses on step 3
+exp2_test_data_df$Recall_3_Correct <- 
+  ifelse(exp2_test_data_df$alternate_recall_coding_final == "2", 1, 0)
+
+exp2_test_data_df$Recall_3_Misinfo <- 
+  ifelse(exp2_test_data_df$alternate_recall_coding_final == "1", 1, 0)
+
+exp2_test_data_df$Recall_3_Other <- 
+  ifelse(exp2_test_data_df$alternate_recall_coding_final == "E" | exp2_test_data_df$alternate_recall_coding_final == "A", 1, 0)
+
+# change nas to zeros for step 3 recall judgments
+exp2_test_data_df$Recall_3_Correct <- 
+  exp2_test_data_df$Recall_3_Correct %>% 
+  replace(is.na(.), 0)
+
+exp2_test_data_df$Recall_3_Misinfo <- 
+  exp2_test_data_df$Recall_3_Misinfo %>% 
+  replace(is.na(.), 0)
+
+exp2_test_data_df$Recall_3_Other <- 
+  exp2_test_data_df$Recall_3_Other %>% 
+  replace(is.na(.), 0)
+
+# string variable for correction classification response on step 2
+exp2_test_data_df$Correction_Resp_p3 <- 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 1, "Correction", "Not Correction")
+
+# 1/0 variables for signal detection response categories for correction classifications in phases 2
+exp2_test_data_df$Hit_p2 <- 
+  ifelse(exp2_test_data_df$make_detections == 1 & exp2_test_data_df$statementtype != "repeated", 1, 0)
+
+exp2_test_data_df$Miss_p2 <- 
+  ifelse(exp2_test_data_df$make_detections == 0 & exp2_test_data_df$statementtype != "repeated", 1, 0)
+
+exp2_test_data_df$FA_p2 <- 
+  ifelse(exp2_test_data_df$make_detections == 1 & exp2_test_data_df$statementtype == "repeated", 1, 0)
+
+exp2_test_data_df$CR_p2 <- 
+  ifelse(exp2_test_data_df$make_detections == 0 & exp2_test_data_df$statementtype == "repeated", 1, 0)
+
+# 1/0 variables for signal detection response categories for correction classifications in phases 3
+exp2_test_data_df$Hit_p3 <- 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$statementtype != "repeated", 1, 0)
+
+exp2_test_data_df$Miss_p3 <- 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 0 & exp2_test_data_df$statementtype != "repeated", 1, 0)
+
+exp2_test_data_df$FA_p3 <- 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$statementtype == "repeated", 1, 0)
+
+exp2_test_data_df$CR_p3 <- 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 0 & exp2_test_data_df$statementtype == "repeated", 1, 0)
+
+# string variable for correct misinformation recognition in phase 3
+exp2_test_data_df$Misinfo_Recall <- 
+  ifelse(exp2_test_data_df$Recall_3_Misinfo == 1, "Recollected", "Not Recollected")
+
+exp2_test_data_df$Cor_Misinfo_Recall <- 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$Recall_3_Misinfo == 1, "Recollected", 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$Recall_3_Misinfo == 0, "Remembered", 
+  ifelse(exp2_test_data_df$Correction_2_Resp == 0, "Not Remembered", "")))
+
+# string variable for combinations of correction classifications in phases 2 and 3 (with misinformation recollection in phase 3)
+exp2_test_data_df$CorrectionDetectRecollect <- 
+  ifelse(exp2_test_data_df$detection == "Detected" & exp2_test_data_df$Recall_3_Misinfo == 1, "Detected, Recollected",
+  ifelse(exp2_test_data_df$detection == "Detected" & exp2_test_data_df$Recall_3_Misinfo == 0, "Detected, Not Recollected",                             
+  ifelse(exp2_test_data_df$detection == "Not Detected" & exp2_test_data_df$Recall_3_Misinfo == 1, "Not Detected, Recollected",                             
+  ifelse(exp2_test_data_df$detection == "Not Detected" & exp2_test_data_df$Recall_3_Misinfo == 0, "Not Detected, Not Recollected",""))))
+
+# string variable for combinations of correction classifications in phases 2 and 3 (with correction recognition in phase 3)
+exp2_test_data_df$CorrectionDetectRecognize2 <- 
+  ifelse(exp2_test_data_df$detection == "Detected" & exp2_test_data_df$Correction_2_Resp == 1, "Detected, Recognized",
+  ifelse(exp2_test_data_df$detection == "Detected" & exp2_test_data_df$Correction_2_Resp == 0, "Detected, Not Recognized",                             
+  ifelse(exp2_test_data_df$detection == "Not Detected" & exp2_test_data_df$Correction_2_Resp == 1, "Not Detected, Recognized",                             
+  ifelse(exp2_test_data_df$detection == "Not Detected" & exp2_test_data_df$Correction_2_Resp == 0, "Not Detected, Not Recognized",""))))
+
+# string variable for combinations of all possible correction classifications in phases 2 and 3
+exp2_test_data_df$CorrectionDetectRecognize3 <-
+  ifelse(exp2_test_data_df$make_detections == 1 & exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$Recall_3_Misinfo == 1, "Detected, Recognized, & Fake News Recalled",
+  ifelse(exp2_test_data_df$make_detections == 1 & exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$Recall_3_Misinfo == 0, "Detected, Recognized, & Fake News Not Recalled",
+  ifelse(exp2_test_data_df$make_detections == 1 & exp2_test_data_df$Correction_2_Resp == 0 & exp2_test_data_df$Recall_3_Misinfo == 0, "Detected & Not Recognized",
+  ifelse(exp2_test_data_df$make_detections == 0 & exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$Recall_3_Misinfo == 1, "Not Detected, Recognized, & Fake News Recalled",
+  ifelse(exp2_test_data_df$make_detections == 0 & exp2_test_data_df$Correction_2_Resp == 1 & exp2_test_data_df$Recall_3_Misinfo == 0, "Not Detected, Recognized, & Fake News Not Recalled",
+  ifelse(exp2_test_data_df$make_detections == 0 & exp2_test_data_df$Correction_2_Resp == 0 & exp2_test_data_df$Recall_3_Misinfo == 0, "Not Detected & Not Recognized", ""))))))
+```
+
+```{r create data frame with only correction statement types and add variables}
+## Experiment 1 ##
+
+# Create data frame
+exp1_test_data_df_correction <- 
+  exp1_test_data_df %>% filter(statementtype != "repeated")
+
+# Add string variable for correction detection in phase 2
+exp1_test_data_df_correction$detection_p2 <- 
+  ifelse(exp1_test_data_df_correction$make_detections == 1, "Detected", "Not Detected")
+
+# string variable for correction classification response on step 2
+exp1_test_data_df_correction$Correction_Resp_p3 <- 
+  ifelse(exp1_test_data_df_correction$Correction_2_Resp == 1, "Correction", "Not Correction")
+
+# Add string variable for misinformation recognition on step 3
+exp1_test_data_df_correction$Recog_3_Misinfo_p3 <- 
+  ifelse(exp1_test_data_df_correction$Recog_3_Misinfo == 1, "Recognized", "Not Recognized")
+
+## Experiment 2 ##
+
+# Create data frame
+exp2_test_data_df_correction <- 
+  exp2_test_data_df %>% filter(statementtype != "repeated")
+
+# Add string variable for correction detection in phase 2
+exp2_test_data_df_correction$detection_p2 <- 
+  ifelse(exp2_test_data_df_correction$make_detections == 1, "Detected", "Not Detected")
+
+# string variable for correction classification response on step 2
+exp2_test_data_df_correction$Correction_Resp_p3 <- 
+  ifelse(exp2_test_data_df_correction$Correction_2_Resp == 1, "Correction", "Not Correction")
+
+# Add string variable for misinformation recall on step 3
+exp2_test_data_df_correction$Recall_3_Misinfo_p3 <- 
+  ifelse(exp2_test_data_df_correction$Recall_3_Misinfo == 1, "Recalled", "Not Recalled")
+```
+
+
+```{r set factors}
+## Experiment 1 ##
+exp1_test_data_df %<>% mutate_at(c("age_group", "subject", "topic", "statementtype", "Misinfo_Recog", "Correction_Resp_p3"), factor)
+exp1_familiarity_df %<>% mutate_at(c("age_group", "subject", "topic", "statementtype", "block"), factor)
+exp1_test_data_df_correction %<>% mutate_at(c("detection", "Misinfo_Recog", "Correction_Resp_p3", "Cor_Misinfo_Recog"), factor)
+
+## Experiment 2 ##
+exp2_test_data_df %<>% mutate_at(c("age_group", "subject", "topic", "statementtype", "Misinfo_Recall", "Correction_Resp_p3"), factor)
+exp2_familiarity_df %<>% mutate_at(c("age_group", "subject", "topic", "statementtype", "block"), factor)
+exp2_test_data_df_correction %<>% mutate_at(c("detection", "Misinfo_Recall", "Correction_Resp_p3", "Cor_Misinfo_Recall"), factor)
+
+```
+
+```{r check sample sizes}
+## Experiment 1 ##
+exp1_combined_df_n <- 
+  exp1_test_data_df %>%
+  group_by(age_group) %>%
+  mutate(N = n_distinct(subject)) %>%
+  summarise(N = mean(N))
+exp1_combined_df_n
+
+## Experiment 2 ##
+exp2_combined_df_n <- 
+  exp1_test_data_df %>%
+  group_by(age_group) %>%
+  mutate(N = n_distinct(subject)) %>%
+  summarise(N = mean(N))
+exp2_combined_df_n
+
+```
+
+# clean names
+```{r}
+exp1_combined_df_n %<>% clean_names()            
+exp1_familiarity_df %<>% clean_names()           
+exp1_test_data_df %<>% clean_names()            
+exp1_test_data_df_belief_2 %<>% clean_names()    
+exp1_test_data_df_correction %<>% clean_names() 
+exp2_combined_df_n %<>% clean_names()           
+exp2_familiarity_df %<>% clean_names()           
+exp2_test_data_df %<>% clean_names()             
+exp2_test_data_df_belief_2 %<>% clean_names()   
+exp2_test_data_df_correction %<>% clean_names() 
+```
+
+```{r Saving Data Frames}
+save.image(file = "../Data/2004_All_Data_df.RData")
+```
+
